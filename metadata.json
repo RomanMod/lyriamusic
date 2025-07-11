@@ -1,0 +1,6 @@
+{
+  "name": "PromptDJ_0.7.1",
+  "description": "Steer a continuous stream of music with text prompts. Added preset management (save/load configurations).",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

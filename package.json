@@ -1,0 +1,23 @@
+{
+  "name": "promptdj_0.7.1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lit": "^3.3.0",
+    "@google/genai": "^1.0.0",
+    "vite": "^5.3.5",
+    "lit-element": "^4.2.0",
+    "lit-html": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0"
+  }
+}

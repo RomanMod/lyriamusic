@@ -25,124 +25,141 @@ export class PromptController extends LitElement {
       align-items: center;
       box-sizing: border-box;
       overflow: hidden;
-      background-color: #2a2a2a;
-      border-radius: 5px;
+      background: linear-gradient(180deg, #24252c 0%, #1a1b20 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .prompt:hover {
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
     }
     .action-buttons {
       position: absolute;
-      top: 1.2vmin;
-      left: 1.2vmin;
-      right: 1.2vmin;
+      top: 1vmin;
+      left: 1vmin;
+      right: 1vmin;
       z-index: 10;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     .remove-button {
-      background: #666;
-      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+      color: #bbb;
       border: none;
       border-radius: 50%;
-      width: 2.8vmin;
-      height: 2.8vmin;
-      font-size: 17px;
+      width: clamp(20px, 3.2vmin, 26px);
+      height: clamp(20px, 3.2vmin, 26px);
+      font-size: 13px;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       opacity: 0.7;
-      transition: opacity 0.2s, background-color 0.2s;
+      transition: all 0.2s ease;
       padding: 0;
     }
     .remove-button:hover {
       opacity: 1;
-      background-color: #777;
+      background: rgba(231, 76, 60, 0.3);
+      color: #fff;
     }
     .remove-button[disabled] {
-      opacity: 0.3;
+      opacity: 0.25;
       cursor: not-allowed;
-      background-color: #555;
+      background: transparent;
     }
     
     /* Styles for the lock button */
     .lock-button {
-      background: #666;
-      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+      color: #bbb;
       border: none;
       border-radius: 50%;
-      width: 2.8vmin;
-      height: 2.8vmin;
-      font-size: 17px; /* Adjusted for icon */
+      width: clamp(20px, 3.2vmin, 26px);
+      height: clamp(20px, 3.2vmin, 26px);
+      font-size: 13px;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       opacity: 0.7;
-      transition: opacity 0.2s, background-color 0.2s;
+      transition: all 0.2s ease;
       padding: 0;
-      flex-shrink: 0; /* Prevent lock button from shrinking */
+      flex-shrink: 0;
     }
     .lock-button:hover {
       opacity: 1;
-      background-color: #777;
+      background: rgba(42, 246, 222, 0.25);
+      color: #2af6de;
     }
     .lock-button svg {
-      width: 60%;
-      height: 60%;
+      width: 58%;
+      height: 58%;
     }
 
     weight-slider {
-      max-height: calc(100% - 19.5vmin); /* Adjusted: 4.5vmin top margin + 15vmin (controls + its margin) */
+      max-height: calc(100% - 17vmin);
       flex: 1;
       min-height: 10vmin;
       width: 100%;
       box-sizing: border-box;
       overflow: hidden;
-      margin-top: 4.5vmin; /* Adjusted: space for remove button */
-      margin-bottom: 0; /* No margin needed before .controls */
+      margin-top: 4vmin;
+      margin-bottom: 0;
     }
     .controls {
       display: flex;
-      flex-direction: row;
+      flex-direction: column;
       align-items: center;
-      justify-content: center; /* Center text now that lock is gone */
+      justify-content: center;
       width: 100%;
-      height: 14vmin;
-      padding: 0 1.2vmin;
+      min-height: 9vmin;
+      max-height: 14vmin;
+      padding: 0.5vmin 1vmin;
       box-sizing: border-box;
-      margin-bottom: 1vmin;
+      margin-bottom: 0.8vmin;
     }
     #text {
-      font-family: 'Google Sans', sans-serif;
-      font-size: 16px;
-      flex-grow: 1; /* Allow text to take available space */
-      height: auto; /* Adjust height based on content or line-height */
-      max-height: 100%; /* Limit to parent's height */
-      padding: 0.4vmin;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Google Sans', sans-serif;
+      font-size: clamp(12px, 1.8vmin, 14.5px);
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.2px;
+      width: 100%;
+      max-height: 100%;
       box-sizing: border-box;
       text-align: center;
-      word-wrap: break-word;
+      word-break: normal;
+      overflow-wrap: break-word;
       overflow-y: auto;
-      overscroll-behavior-y: contain;
-      touch-action: pan-y;
+      scrollbar-width: none; /* No ugly scrollbars */
+      -ms-overflow-style: none;
       border: none;
       outline: none;
       -webkit-font-smoothing: antialiased;
-      color: #fff;
+      color: #eee;
       background-color: transparent;
-      scrollbar-width: thin;
-      scrollbar-color: #666 #1a1a1a;
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: text;
+      transition: all 0.2s ease;
     }
     #text::-webkit-scrollbar {
-      width: 6px;
+      display: none; /* Completely hide webkit scrollbars */
+      width: 0;
+      height: 0;
     }
-    #text::-webkit-scrollbar-track {
-      background: #0009;
-      border-radius: 3px;
+    #text:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+      color: #fff;
     }
-    #text::-webkit-scrollbar-thumb {
-      background-color: #666;
-      border-radius: 3px;
+    #text:focus {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      box-shadow: 0 0 0 1.5px rgba(42, 246, 222, 0.5);
     }
     :host([filtered='true']) .prompt {
       outline: 2px solid #da2000;

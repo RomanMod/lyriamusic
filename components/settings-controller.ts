@@ -7,7 +7,15 @@ import {css, html, LitElement, PropertyValues} from 'lit';
 import {customElement, property, state} from 'lit/decorators.js';
 import {classMap} from 'lit-html/directives/class-map.js';
 import {svg} from 'lit-html';
-import { AppLiveMusicGenerationConfig, Scale, BiquadFilterType } from '../core/types'; // Scale is now the enum
+import {
+  AppLiveMusicGenerationConfig,
+  Scale,
+  BiquadFilterType,
+  EQ_BAND_FREQUENCIES,
+  formatEqFreqLabel,
+  getEqFreqCategory,
+  EqCategory,
+} from '../core/types';
 
 
 /** A panel for managing real-time music generation settings. */
@@ -363,6 +371,359 @@ export class SettingsController extends LitElement {
       -ms-transform: translateX(24px);
       transform: translateX(24px);
     }
+
+    /* Wideband Multi-Band EQ Styles */
+    .eq-mode-switch {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .eq-mode-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #aaa;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .eq-mode-btn:hover {
+      color: #eee;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .eq-mode-btn.active {
+      background: linear-gradient(135deg, rgba(82, 0, 255, 0.45), rgba(42, 246, 222, 0.25));
+      border-color: rgba(42, 246, 222, 0.5);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(42, 246, 222, 0.2);
+    }
+
+    .eq-header-panel {
+      background: rgba(20, 22, 30, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .eq-main-controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .eq-power-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .eq-preamp-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 13px;
+    }
+    .eq-preamp-box input[type="range"] {
+      width: 100px;
+      margin: 0;
+    }
+    .eq-preamp-display {
+      font-family: monospace;
+      font-weight: bold;
+      color: #2af6de;
+      min-width: 45px;
+      text-align: right;
+    }
+    .eq-presets-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .eq-preset-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #ccc;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .eq-preset-chip:hover {
+      background: rgba(42, 246, 222, 0.18);
+      border-color: rgba(42, 246, 222, 0.5);
+      color: #2af6de;
+    }
+    .eq-reset-btn {
+      background: rgba(255, 75, 75, 0.15);
+      border: 1px solid rgba(255, 75, 75, 0.35);
+      color: #ff8888;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-left: auto;
+    }
+    .eq-reset-btn:hover {
+      background: rgba(255, 75, 75, 0.35);
+      color: #fff;
+    }
+
+    .eq-curve-card {
+      background: #0d0e14;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 8px 6px 4px 6px;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.85);
+    }
+    .eq-curve-svg {
+      width: 100%;
+      height: 125px;
+      display: block;
+    }
+    .grid-line {
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 1;
+      stroke-dasharray: 2 3;
+    }
+    .grid-line-zero {
+      stroke: rgba(255, 255, 255, 0.3);
+      stroke-width: 1.2;
+    }
+    .grid-line-vert {
+      stroke: rgba(255, 255, 255, 0.06);
+      stroke-width: 1;
+    }
+    .grid-text {
+      font-size: 10px;
+      fill: rgba(255, 255, 255, 0.4);
+      font-family: monospace;
+    }
+    .grid-text.zero {
+      fill: rgba(255, 255, 255, 0.75);
+      font-weight: bold;
+    }
+    .grid-text.freq {
+      fill: rgba(42, 246, 222, 0.6);
+    }
+    .eq-curve-dot {
+      fill: #2af6de;
+      transition: all 0.1s ease;
+    }
+    .eq-curve-dot.boost {
+      fill: #3dffab;
+    }
+    .eq-curve-dot.cut {
+      fill: #ff25f6;
+    }
+
+    .eq-filter-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      scrollbar-width: thin;
+    }
+    .eq-filter-tab {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #aaa;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .eq-filter-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .eq-filter-tab.active {
+      background: rgba(82, 0, 255, 0.45);
+      border-color: #5200ff;
+      color: #fff;
+      box-shadow: 0 0 8px rgba(82, 0, 255, 0.3);
+    }
+
+    /* Faders Rack */
+    .eq-rack-container {
+      background: #14151e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 12px 8px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      box-shadow: inset 0 2px 15px rgba(0, 0, 0, 0.6);
+    }
+    .eq-faders-strip {
+      display: flex;
+      flex-direction: row;
+      gap: 6px;
+      align-items: stretch;
+      min-width: max-content;
+      justify-content: flex-start;
+      padding: 0 4px;
+    }
+    .eq-band-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 44px;
+      min-width: 44px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 6px 2px 8px 2px;
+      gap: 5px;
+      box-sizing: border-box;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .eq-band-column:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .eq-btn {
+      width: 32px;
+      height: 26px;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: #eee;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s ease;
+      user-select: none;
+      padding: 0;
+    }
+    .eq-btn:hover:not(:disabled) {
+      background: #5200ff;
+      border-color: #2af6de;
+      color: #fff;
+      transform: scale(1.05);
+    }
+    .eq-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+    .eq-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .eq-btn.eq-zero {
+      height: 18px;
+      font-size: 11px;
+      color: #888;
+      border-color: rgba(255, 255, 255, 0.08);
+      background: transparent;
+    }
+    .eq-btn.eq-zero:hover:not(:disabled) {
+      color: #fff;
+      border-color: #666;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .eq-gain-display {
+      font-size: 10px;
+      font-family: monospace;
+      font-weight: bold;
+      padding: 2px 3px;
+      border-radius: 4px;
+      min-width: 38px;
+      text-align: center;
+      letter-spacing: -0.2px;
+      color: #888;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .eq-gain-display.boost {
+      color: #3dffab;
+      background: rgba(61, 255, 171, 0.15);
+    }
+    .eq-gain-display.cut {
+      color: #ff4d6d;
+      background: rgba(255, 77, 109, 0.15);
+    }
+
+    .fader-track-wrap {
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin: 4px 0;
+    }
+    .eq-fader {
+      -webkit-appearance: slider-vertical;
+      appearance: slider-vertical;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 22px;
+      height: 136px;
+      cursor: pointer;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+    }
+    .fader-zero-indicator {
+      position: absolute;
+      top: 50%;
+      left: 2px;
+      right: 2px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.25);
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+
+    .eq-freq-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      text-align: center;
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+    .eq-freq-badge.sub { color: #d9b2ff; }
+    .eq-freq-badge.bass { color: #2af6de; }
+    .eq-freq-badge.mid { color: #ffdd28; }
+    .eq-freq-badge.high { color: #3dffab; }
+    .eq-freq-badge.air { color: #ff25f6; }
   `;
 
   private readonly defaultConfig: AppLiveMusicGenerationConfig = {
@@ -396,6 +757,9 @@ export class SettingsController extends LitElement {
     eqFrequency: 800,
     eqQ: 1,
     eqGain: 6,
+    multiBandEqEnabled: false,
+    multiBandEqPreamp: 0,
+    multiBandEqGains: {},
     compressorEnabled: false,
     compressorThreshold: -24,
     compressorKnee: 30,
@@ -430,6 +794,8 @@ export class SettingsController extends LitElement {
   @property({type: Number}) autoVolumeMinLevelPercent = 60;
   
   @state() private currentView: string = 'main';
+  @state() private activeEqMode: 'multiband' | 'parametric' = 'multiband';
+  @state() private eqCategoryFilter: 'all' | EqCategory = 'all';
 
   public getAppConfig(): AppLiveMusicGenerationConfig {
     const currentFullConfig = {...this._config};
@@ -614,7 +980,7 @@ export class SettingsController extends LitElement {
       'echo': cfg.echoUiEnabled ?? false,
       'reverb': cfg.reverbUiEnabled ?? false,
       'flanger': cfg.flangerEnabled ?? false,
-      'eq': cfg.eqEnabled ?? false,
+      'eq': (cfg.eqEnabled ?? false) || (cfg.multiBandEqEnabled ?? false),
       'compressor': cfg.compressorEnabled ?? false,
       'phaser': cfg.phaserEnabled ?? false,
       'tremolo': cfg.tremoloEnabled ?? false,
@@ -642,7 +1008,7 @@ export class SettingsController extends LitElement {
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['echo']})} @click=${() => this.currentView = 'echo'}>Echo (UI)</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['reverb']})} @click=${() => this.currentView = 'reverb'}>Reverb (UI)</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['flanger']})} @click=${() => this.currentView = 'flanger'}>Flanger</button>
-            <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['eq']})} @click=${() => this.currentView = 'eq'}>Filter / EQ</button>
+            <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['eq']})} @click=${() => this.currentView = 'eq'}>Широкополосный EQ / Фильтр</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['compressor']})} @click=${() => this.currentView = 'compressor'}>Compressor</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['phaser']})} @click=${() => this.currentView = 'phaser'}>Phaser</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['tremolo']})} @click=${() => this.currentView = 'tremolo'}>Tremolo</button>
@@ -781,7 +1147,388 @@ export class SettingsController extends LitElement {
     `);
   }
 
-  private renderEq() {
+  private readonly eqPresets: Record<string, { name: string; icon: string; preamp: number; gains: Record<number, number> }> = {
+    flat: {
+      name: 'Сброс (Flat 0 dB)',
+      icon: '🔄',
+      preamp: 0,
+      gains: {}
+    },
+    bassBoost: {
+      name: 'Bass Boost (+6 dB)',
+      icon: '🔊',
+      preamp: -2,
+      gains: { 1: 1, 5: 2, 10: 3, 16: 4, 20: 5, 25: 5.5, 31.5: 6, 40: 6, 50: 6, 63: 5.5, 80: 4.5, 100: 3.5, 125: 2.5, 160: 1.5, 200: 0.5 }
+    },
+    subKick: {
+      name: 'Sub Rumble (1-60 Hz)',
+      icon: '⚡',
+      preamp: -3,
+      gains: { 1: 4, 5: 6, 10: 8, 16: 9, 20: 9, 25: 8.5, 31.5: 7.5, 40: 6, 50: 4, 63: 2 }
+    },
+    vShape: {
+      name: 'V-Shape / Smile (Rock/EDM)',
+      icon: '🎸',
+      preamp: -2.5,
+      gains: {
+        1: 2, 5: 3, 10: 4, 16: 5, 20: 5.5, 25: 6, 31.5: 6, 40: 5, 50: 4, 63: 3, 80: 1.5, 100: 0.5,
+        315: -1.5, 400: -2.5, 500: -3, 630: -3, 800: -2, 1000: -1,
+        4000: 1.5, 5000: 2.5, 6300: 3.5, 8000: 4.5, 10000: 5.5, 12500: 6, 16000: 6.5, 20000: 7, 22000: 7, 25000: 7
+      }
+    },
+    vocalClarity: {
+      name: 'Vocal Clarity & Presence',
+      icon: '🎤',
+      preamp: 0,
+      gains: {
+        1: -12, 5: -12, 10: -10, 16: -8, 20: -6, 25: -4, 31.5: -2, 40: -1,
+        200: -1.5, 250: -2.5, 315: -2.5, 400: -1.5,
+        1250: 1.5, 1600: 3, 2000: 4, 2500: 4.5, 3150: 4, 4000: 3, 5000: 2,
+        12500: 2, 16000: 3, 20000: 2
+      }
+    },
+    airBrilliance: {
+      name: 'Air & Sparkle (12k-25k)',
+      icon: '✨',
+      preamp: -1.5,
+      gains: {
+        6300: 1, 8000: 2, 10000: 3.5, 12500: 5.5, 16000: 7, 20000: 8, 22000: 8, 25000: 8
+      }
+    },
+    subCut: {
+      name: 'Sub-Cut (<20 Hz HPF)',
+      icon: '🛡️',
+      preamp: 0.5,
+      gains: {
+        1: -24, 5: -24, 10: -20, 16: -12, 20: -6, 25: -2
+      }
+    },
+    loudness: {
+      name: 'Loudness Contour',
+      icon: '🎧',
+      preamp: -2,
+      gains: {
+        1: 3, 5: 4, 10: 5, 16: 5.5, 20: 6, 25: 6, 31.5: 5.5, 40: 5, 50: 4, 63: 3,
+        8000: 2, 10000: 3.5, 12500: 4.5, 16000: 5.5, 20000: 6, 22000: 6.5, 25000: 6.5
+      }
+    }
+  };
+
+  private handleBandGainInput(freq: number, e: Event) {
+    const input = e.target as HTMLInputElement;
+    const val = parseFloat(input.value);
+    this.setBandGain(freq, isNaN(val) ? 0 : val);
+  }
+
+  private setBandGain(freq: number, gainDb: number) {
+    const clamped = Math.max(-24, Math.min(24, Math.round(gainDb * 10) / 10));
+    const newConfig = { ...this._config };
+    const currentGains = { ...(newConfig.multiBandEqGains || {}) };
+    if (clamped === 0) {
+      delete currentGains[freq];
+    } else {
+      currentGains[freq] = clamped;
+    }
+    newConfig.multiBandEqGains = currentGains;
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private adjustBandGain(freq: number, deltaDb: number, e?: MouseEvent) {
+    const step = e && e.shiftKey ? (deltaDb > 0 ? 0.5 : -0.5) : deltaDb;
+    const current = this._config.multiBandEqGains?.[freq] ?? 0;
+    this.setBandGain(freq, current + step);
+  }
+
+  private resetBandGain(freq: number) {
+    this.setBandGain(freq, 0);
+  }
+
+  private resetAllBands() {
+    const newConfig = { ...this._config };
+    newConfig.multiBandEqGains = {};
+    newConfig.multiBandEqPreamp = 0;
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private applyEqPreset(presetKey: string) {
+    const preset = this.eqPresets[presetKey];
+    if (!preset) return;
+    const newConfig = { ...this._config };
+    newConfig.multiBandEqPreamp = preset.preamp;
+    newConfig.multiBandEqGains = { ...preset.gains };
+    newConfig.multiBandEqEnabled = true;
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private handlePreampInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const val = parseFloat(input.value);
+    const clamped = Math.max(-12, Math.min(12, Math.round((isNaN(val) ? 0 : val) * 10) / 10));
+    const newConfig = { ...this._config, multiBandEqPreamp: clamped };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private adjustPreamp(deltaDb: number) {
+    const current = this._config.multiBandEqPreamp ?? 0;
+    const clamped = Math.max(-12, Math.min(12, Math.round((current + deltaDb) * 10) / 10));
+    const newConfig = { ...this._config, multiBandEqPreamp: clamped };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private toggleMultiBandEq(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const newConfig = { ...this._config, multiBandEqEnabled: target.checked };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private renderEqCurveSvg(gains: Record<number, number>, preamp: number) {
+    const width = 800;
+    const height = 120;
+    const pointsCount = 90;
+    const minLog = Math.log10(1);      // 0
+    const maxLog = Math.log10(25000);  // ~4.39794
+    const logRange = maxLog - minLog;
+
+    const activeFrequencies = Object.keys(gains).map(Number).filter(f => (gains[f] ?? 0) !== 0);
+
+    const pathPoints: Array<{ x: number; y: number }> = [];
+
+    for (let i = 0; i < pointsCount; i++) {
+      const t = i / (pointsCount - 1);
+      const freq = Math.pow(10, minLog + t * logRange);
+      let totalGainDb = preamp;
+
+      for (const f of activeFrequencies) {
+        const gain = gains[f];
+        if (gain) {
+          const octDiff = Math.log2(freq / f);
+          const bell = 1 / (1 + Math.pow(octDiff / 0.55, 2));
+          totalGainDb += gain * bell;
+        }
+      }
+
+      const clampedGain = Math.max(-24, Math.min(24, totalGainDb));
+      const y = (height / 2) - (clampedGain / 24) * (height / 2 - 8);
+      const x = t * width;
+      pathPoints.push({ x, y });
+    }
+
+    const d = pathPoints.reduce((acc, p, idx) => `${acc} ${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, '');
+    const fillD = `${d} L ${width} ${height / 2} L 0 ${height / 2} Z`;
+
+    const freqMarkers = [
+      { freq: 1, label: '1Hz' },
+      { freq: 10, label: '10Hz' },
+      { freq: 100, label: '100Hz' },
+      { freq: 1000, label: '1kHz' },
+      { freq: 10000, label: '10kHz' },
+      { freq: 25000, label: '25kHz' },
+    ];
+
+    return svg`
+      <svg class="eq-curve-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="eqCurveGlow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2af6de" stop-opacity="0.3" />
+            <stop offset="50%" stop-color="#5200ff" stop-opacity="0.12" />
+            <stop offset="100%" stop-color="#9900ff" stop-opacity="0.0" />
+          </linearGradient>
+          <linearGradient id="eqLineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#d9b2ff" />
+            <stop offset="25%" stop-color="#2af6de" />
+            <stop offset="60%" stop-color="#3dffab" />
+            <stop offset="100%" stop-color="#ff25f6" />
+          </linearGradient>
+        </defs>
+
+        <line x1="0" y1="${height * 0.125}" x2="${width}" y2="${height * 0.125}" class="grid-line" />
+        <line x1="0" y1="${height * 0.25}" x2="${width}" y2="${height * 0.25}" class="grid-line" />
+        <line x1="0" y1="${height * 0.375}" x2="${width}" y2="${height * 0.375}" class="grid-line" />
+        <line x1="0" y1="${height / 2}" x2="${width}" y2="${height / 2}" class="grid-line-zero" />
+        <line x1="0" y1="${height * 0.625}" x2="${width}" y2="${height * 0.625}" class="grid-line" />
+        <line x1="0" y1="${height * 0.75}" x2="${width}" y2="${height * 0.75}" class="grid-line" />
+        <line x1="0" y1="${height * 0.875}" x2="${width}" y2="${height * 0.875}" class="grid-line" />
+
+        <text x="6" y="${height * 0.16}" class="grid-text">+18 dB</text>
+        <text x="6" y="${height / 2 - 3}" class="grid-text zero">0 dB</text>
+        <text x="6" y="${height * 0.86}" class="grid-text">-18 dB</text>
+
+        ${freqMarkers.map(m => {
+          const t = Math.log10(m.freq) / logRange;
+          const x = t * width;
+          return svg`
+            <line x1="${x}" y1="0" x2="${x}" y2="${height}" class="grid-line-vert" />
+            <text x="${Math.max(6, Math.min(width - 32, x + 3))}" y="${height - 4}" class="grid-text freq">${m.label}</text>
+          `;
+        })}
+
+        <path d="${fillD}" fill="url(#eqCurveGlow)" />
+        <path d="${d}" fill="none" stroke="url(#eqLineGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+        ${EQ_BAND_FREQUENCIES.map(f => {
+          const gain = gains[f] ?? 0;
+          if (gain === 0 && preamp === 0) return '';
+          const t = Math.log10(f) / logRange;
+          const x = t * width;
+          let ptGain = preamp;
+          for (const af of activeFrequencies) {
+            const g = gains[af];
+            if (g) {
+              const octDiff = Math.log2(f / af);
+              ptGain += g * (1 / (1 + Math.pow(octDiff / 0.55, 2)));
+            }
+          }
+          const y = (height / 2) - (Math.max(-24, Math.min(24, ptGain)) / 24) * (height / 2 - 8);
+          return svg`<circle cx="${x}" cy="${y}" r="3.5" class="eq-curve-dot ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}" />`;
+        })}
+      </svg>
+    `;
+  }
+
+  private renderMultiBandEq() {
+    const cfg = this._config;
+    const isEnabled = !!(cfg.multiBandEqEnabled ?? this.defaultConfig.multiBandEqEnabled);
+    const gains = cfg.multiBandEqGains || {};
+    const preamp = cfg.multiBandEqPreamp ?? 0;
+
+    const visibleBands = EQ_BAND_FREQUENCIES.filter(freq => {
+      if (this.eqCategoryFilter === 'all') return true;
+      return getEqFreqCategory(freq) === this.eqCategoryFilter;
+    });
+
+    const categoryTabs: Array<{ id: 'all' | EqCategory; label: string }> = [
+      { id: 'all', label: `Все полосы (37)` },
+      { id: 'sub', label: 'Суб-НЧ (1 - 40 Гц)' },
+      { id: 'bass', label: 'Бас (50 - 250 Гц)' },
+      { id: 'mid', label: 'СЧ (315 Гц - 2 кГц)' },
+      { id: 'high', label: 'ВЧ (2.5 - 10 кГц)' },
+      { id: 'air', label: 'Воздух (12.5 - 25 кГц)' },
+    ];
+
+    return html`
+      <div class="eq-header-panel">
+        <div class="eq-main-controls-row">
+          <div class="eq-power-toggle">
+            <span>Эквалайзер (EQ)</span>
+            <label class="switch">
+              <input type="checkbox" id="multiBandEqEnabled" .checked=${isEnabled} @change=${this.toggleMultiBandEq}>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="eq-preamp-box" title="Предусилитель / Мастер гейн для компенсации громкости">
+            <label for="eqPreamp">Preamp:</label>
+            <button class="eq-btn" ?disabled=${!isEnabled || preamp <= -12} @click=${() => this.adjustPreamp(-0.5)}>-</button>
+            <input type="range" id="eqPreamp" min="-12" max="12" step="0.5" .value=${String(preamp)} ?disabled=${!isEnabled} @input=${this.handlePreampInput} />
+            <button class="eq-btn" ?disabled=${!isEnabled || preamp >= 12} @click=${() => this.adjustPreamp(0.5)}>+</button>
+            <span class="eq-preamp-display">${preamp >= 0 ? '+' : ''}${preamp.toFixed(1)} dB</span>
+            <button class="eq-btn eq-zero" ?disabled=${!isEnabled || preamp === 0} @click=${() => this.adjustPreamp(-preamp)} title="Сброс преампа в 0 dB">0</button>
+          </div>
+
+          <button class="eq-reset-btn" ?disabled=${!isEnabled} @click=${this.resetAllBands} title="Сбросить все полосы и преамп в 0 dB">
+            🔄 Сброс всех полос (0 dB)
+          </button>
+        </div>
+
+        <div class="eq-presets-bar">
+          <span style="font-size: 12px; color: #888; font-weight: 600;">Пресеты:</span>
+          ${Object.entries(this.eqPresets).map(([key, p]) => html`
+            <button class="eq-preset-chip" @click=${() => this.applyEqPreset(key)}>
+              <span>${p.icon}</span> ${p.name}
+            </button>
+          `)}
+        </div>
+      </div>
+
+      <!-- Real-time EQ Curve -->
+      <div class="eq-curve-card">
+        ${this.renderEqCurveSvg(gains, preamp)}
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="eq-filter-tabs">
+        ${categoryTabs.map(tab => html`
+          <button
+            class=${classMap({'eq-filter-tab': true, 'active': this.eqCategoryFilter === tab.id})}
+            @click=${() => this.eqCategoryFilter = tab.id}
+          >
+            ${tab.label}
+          </button>
+        `)}
+      </div>
+
+      <!-- Faders Rack -->
+      <div class="eq-rack-container" ?disabled=${!isEnabled}>
+        <div class="eq-faders-strip">
+          ${visibleBands.map(freq => {
+            const gain = gains[freq] ?? 0;
+            const category = getEqFreqCategory(freq);
+            const label = formatEqFreqLabel(freq);
+            return html`
+              <div class="eq-band-column" title="${freq} Гц">
+                <button
+                  class="eq-btn"
+                  ?disabled=${!isEnabled || gain >= 24}
+                  @click=${(e: MouseEvent) => this.adjustBandGain(freq, 1, e)}
+                  title="+1.0 dB (Shift: +0.5 dB)"
+                >+</button>
+
+                <div class="eq-gain-display ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}">
+                  ${gain > 0 ? '+' : ''}${gain.toFixed(1)}
+                </div>
+
+                <div class="fader-track-wrap">
+                  <input
+                    type="range"
+                    class="eq-fader"
+                    min="-24"
+                    max="24"
+                    step="0.5"
+                    .value=${String(gain)}
+                    ?disabled=${!isEnabled}
+                    @input=${(e: Event) => this.handleBandGainInput(freq, e)}
+                  />
+                  <div class="fader-zero-indicator"></div>
+                </div>
+
+                <button
+                  class="eq-btn"
+                  ?disabled=${!isEnabled || gain <= -24}
+                  @click=${(e: MouseEvent) => this.adjustBandGain(freq, -1, e)}
+                  title="-1.0 dB (Shift: -0.5 dB)"
+                >-</button>
+
+                <button
+                  class="eq-btn eq-zero"
+                  ?disabled=${!isEnabled || gain === 0}
+                  @click=${() => this.resetBandGain(freq)}
+                  title="Сбросить полосу в 0 dB"
+                >0</button>
+
+                <div class="eq-freq-badge ${category}">
+                  ${label}
+                </div>
+              </div>
+            `;
+          })}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderParametricFilter() {
     const cfg = this._config;
     const isEnabled = !!(cfg.eqEnabled ?? this.defaultConfig.eqEnabled);
     const eqFilterTypes: BiquadFilterType[] = ['lowpass', 'highpass', 'bandpass', 'lowshelf', 'highshelf', 'peaking', 'notch'];
@@ -789,7 +1536,7 @@ export class SettingsController extends LitElement {
     const showEqQ = ['lowpass', 'highpass', 'bandpass', 'peaking', 'notch'].includes(currentEqType);
     const showEqGain = ['lowshelf', 'highshelf', 'peaking'].includes(currentEqType);
 
-    return this.renderEffectGroup('eqEnabled', 'Filter / EQ', html`
+    return this.renderEffectGroup('eqEnabled', 'Параметрический фильтр', html`
       <div class="setting">
         <label for="eqType">Type</label>
         <select id="eqType" .value=${currentEqType} @change=${this.handleInputChange} ?disabled=${!isEnabled}>
@@ -800,6 +1547,27 @@ export class SettingsController extends LitElement {
       ${showEqQ ? this.renderSlider('eqQ', 'Q Factor', 0.0001, 100, 0.0001, cfg.eqQ, this.defaultConfig.eqQ!, !isEnabled, 4) : ''}
       ${showEqGain ? this.renderSlider('eqGain', 'Gain (dB)', -40, 40, 0.1, cfg.eqGain, this.defaultConfig.eqGain!, !isEnabled, 1) : ''}
     `);
+  }
+
+  private renderEq() {
+    return html`
+      <div class="eq-mode-switch">
+        <button
+          class=${classMap({'eq-mode-btn': true, 'active': this.activeEqMode === 'multiband'})}
+          @click=${() => this.activeEqMode = 'multiband'}
+        >
+          <span>🎚️</span> Широкополосный EQ (37 полос: 1 Гц — 25 кГц)
+        </button>
+        <button
+          class=${classMap({'eq-mode-btn': true, 'active': this.activeEqMode === 'parametric'})}
+          @click=${() => this.activeEqMode = 'parametric'}
+        >
+          <span>🎛️</span> Параметрический фильтр (Sweep)
+        </button>
+      </div>
+
+      ${this.activeEqMode === 'multiband' ? this.renderMultiBandEq() : this.renderParametricFilter()}
+    `;
   }
   
   private renderCompressor() {
@@ -902,7 +1670,7 @@ export class SettingsController extends LitElement {
       case 'echo': return this.renderSettingsPage('Echo (UI)', this.renderEcho());
       case 'reverb': return this.renderSettingsPage('Reverb (UI)', this.renderReverb());
       case 'flanger': return this.renderSettingsPage('Flanger', this.renderFlanger());
-      case 'eq': return this.renderSettingsPage('Filter / EQ', this.renderEq());
+      case 'eq': return this.renderSettingsPage('Широкополосный EQ (1 Гц — 25 кГц)', this.renderEq());
       case 'compressor': return this.renderSettingsPage('Compressor', this.renderCompressor());
       case 'phaser': return this.renderSettingsPage('Phaser', this.renderPhaser());
       case 'tremolo': return this.renderSettingsPage('Tremolo', this.renderTremolo());

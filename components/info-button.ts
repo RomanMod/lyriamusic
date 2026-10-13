@@ -7,15 +7,19 @@ import {svg} from 'lit-html';
 import {customElement} from 'lit/decorators.js';
 import {IconButton} from './icon-button';
 
-/** A button for showing information or help. */
+/** A button for showing information, wiki, or help. */
 @customElement('info-button')
 export class InfoButton extends IconButton {
   private renderInfoIcon() {
-    // A simple question mark icon
     return svg`
-      <path d="M70 35 Q 60 35, 60 45 Q 60 55, 70 55 Q 80 55, 80 45 Q 80 35, 70 35 M 70 58 L 70 65" 
-            stroke="#FEFEFE" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-      <circle cx="70" cy="72" r="3" fill="#FEFEFE" />
+      <g transform="translate(47, 31) scale(1.9)">
+        <!-- Info circle -->
+        <circle cx="12" cy="12" r="10" stroke="#FEFEFE" stroke-width="2" fill="none" />
+        <!-- Dot -->
+        <circle cx="12" cy="7.5" r="1.25" fill="#FEFEFE" />
+        <!-- Stem & Serif -->
+        <path d="M12 11V16.5M10.5 11H12" stroke="#FEFEFE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
     `;
   }
 

@@ -68,6 +68,11 @@ export interface AppLiveMusicGenerationConfig extends ImportedLiveMusicGeneratio
   eqQ?: number; // 0.0001 - 1000
   eqGain?: number; // dB, e.g., -40 to 40 (for lowshelf, highshelf, peaking)
 
+  // Wideband Graphic Equalizer (1 Hz - 25 kHz)
+  multiBandEqEnabled?: boolean;
+  multiBandEqPreamp?: number; // dB, -12 to +12
+  multiBandEqGains?: Record<number, number>; // map frequency (Hz) -> gain (dB, -24 to +24)
+
   // Compressor (DynamicsCompressorNode)
   compressorEnabled?: boolean;
   compressorThreshold?: number; // dB, e.g., -100 to 0
@@ -110,4 +115,29 @@ export interface Preset {
   settings: AppLiveMusicGenerationConfig;
   autoDensity: boolean;
   autoBrightness: boolean;
+}
+
+// 37-band full-spectrum frequencies from 1 Hz (sub/infrasound) to 25,000 Hz (ultra-high air)
+export const EQ_BAND_FREQUENCIES = [
+  1, 5, 10, 16, 20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000, 22000, 25000
+] as const;
+
+export type EqBandFrequency = typeof EQ_BAND_FREQUENCIES[number];
+
+export type EqCategory = 'sub' | 'bass' | 'mid' | 'high' | 'air';
+
+export function getEqFreqCategory(freq: number): EqCategory {
+  if (freq <= 40) return 'sub';
+  if (freq <= 250) return 'bass';
+  if (freq <= 2000) return 'mid';
+  if (freq <= 10000) return 'high';
+  return 'air';
+}
+
+export function formatEqFreqLabel(freq: number): string {
+  if (freq >= 1000) {
+    const k = freq / 1000;
+    return `${k}k`;
+  }
+  return `${freq}`;
 }

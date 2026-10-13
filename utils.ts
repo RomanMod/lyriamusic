@@ -159,22 +159,27 @@ function getUnusedRandomColor(usedColors: string[]): string {
  * @returns {Promise<boolean>} True if the connection is likely available, false otherwise.
  */
 async function checkInternetConnection(): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false;
+  }
   try {
-    // The 'generate_204' endpoint is designed for this purpose. It returns a 204 No Content response.
-    // We use HEAD method to be as lightweight as possible.
-    // 'no-cors' mode prevents CORS errors but gives an opaque response. We only care if the request succeeds, not its content.
-    // 'no-store' cache option helps ensure we are making a fresh check.
-    const response = await fetch('https://www.google.com/generate_204', {
+    const response = await fetch('/index.html', {
       method: 'HEAD',
-      mode: 'no-cors',
       cache: 'no-store'
     });
-    // For opaque responses, 'ok' is always false. Success is determined by the fetch promise not rejecting.
-    return true;
-  } catch (error) {
-    // A network error (e.g., DNS resolution failure, no route to host) will cause the promise to reject.
-    console.warn('Internet connection check failed:', error);
-    return false;
+    return response.ok || response.status === 304;
+  } catch {
+    try {
+      await fetch('https://www.google.com/generate_204', {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-store'
+      });
+      return true;
+    } catch (error) {
+      console.warn('Internet connection check failed:', error);
+      return false;
+    }
   }
 }
 

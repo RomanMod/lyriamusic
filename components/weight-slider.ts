@@ -30,11 +30,19 @@ export class WeightSlider extends LitElement {
       align-items: center;
     }
     .value-display {
-      font-size: 14px;
-      color: #ccc;
-      margin: 0.5vmin 0;
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: #9ca3af;
+      margin: 0.6vmin 0 0.2vmin 0;
       user-select: none;
       text-align: center;
+      letter-spacing: 0.3px;
+      transition: color 0.2s ease;
+    }
+    :host(:hover) .value-display,
+    .scroll-container:active .value-display {
+      color: #2af6de;
     }
     .slider-container {
       position: relative;

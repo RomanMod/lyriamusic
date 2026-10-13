@@ -14,10 +14,11 @@ import {
   GoogleGenAI,
   type LiveMusicServerMessage,
   type LiveMusicSession,
+  type LiveMusicGenerationConfig,
 } from '@google/genai';
 
 import { PROMPT_TEXT_PRESETS, COLORS } from './core/constants';
-import { AppLiveMusicGenerationConfig, Prompt, PlaybackState, BiquadFilterType, Preset, Scale } from './core/types';
+import { AppLiveMusicGenerationConfig, Prompt, PlaybackState, BiquadFilterType, Preset, Scale, EQ_BAND_FREQUENCIES } from './core/types';
 import { throttle, getUnusedRandomColor, checkInternetConnection } from './utils';
 import { decode, decodeAudioData, pcmToWav, downloadBlob } from './utils';
 
@@ -29,12 +30,16 @@ import './components/toast-message';
 import './components/play-pause-button';
 import './components/record-button';
 import './components/record-fx-button'; // New for FX recording
+import './components/mic-sync-button'; // New for microphone rhythm & pitch sync
 import './components/reset-button';
 import './components/add-prompt-button';
 import './components/add-random-prompt-button'; // New
 import './components/info-modal';
+import './components/info-button';
 import './components/settings-button'; // New
 import './components/settings-modal'; // New
+import './components/volume-button'; // Uniform volume button
+import './components/mic-sync-modal'; // New for microphone sync modal
 import './components/preset-manager-modal'; // New
 import './components/confirmation-modal'; // New
 
@@ -48,16 +53,7 @@ import type { PromptController } from './components/prompt-controller';
 import type { PresetManagerModal } from './components/preset-manager-modal'; // New
 import type { ConfirmationModal } from './components/confirmation-modal'; // New
 
-const ENABLE_LOGGING = true; // Установите true для отладочных сообщений в консоли
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.API_KEY,
-  apiVersion: 'v1alpha',
-});
-let model = 'lyria-realtime-exp';
-
-// GA4 Integration
-const GA_MEASUREMENT_ID = process.env.GA_MEASUREMENT_ID;
+const ENABLE_LOGGING = false;
 
 declare global {
   interface Window {
@@ -65,6 +61,47 @@ declare global {
     gtag: (...args: any[]) => void;
   }
 }
+
+export function djLog(level: 'info' | 'warn' | 'error' | 'success', msg: string, data?: any) {
+  if (!ENABLE_LOGGING && level !== 'error') return;
+  const prefix = `[PromptDJ]`;
+  if (level === 'error') console.error(prefix, msg, data !== undefined ? data : '');
+  else console.log(prefix, msg, data !== undefined ? data : '');
+}
+
+function pickRealKey(...keys: any[]): string {
+  for (const k of keys) {
+    if (typeof k === 'string' && k && k !== 'MY_GEMINI_API_KEY' && k.startsWith('AIzaSy')) {
+      return k;
+    }
+  }
+  for (const k of keys) {
+    if (typeof k === 'string' && k && k !== 'MY_GEMINI_API_KEY' && k.trim() !== '') {
+      return k;
+    }
+  }
+  return '';
+}
+
+const API_KEY: string = pickRealKey(
+  typeof process !== 'undefined' ? process.env?.API_KEY : '',
+  typeof window !== 'undefined' ? (window as any).process?.env?.API_KEY : '',
+  (import.meta as any).env?.VITE_GEMINI_API_KEY,
+  (import.meta as any).env?.GEMINI_API_KEY,
+);
+
+const ai = new GoogleGenAI({
+  apiKey: API_KEY,
+  apiVersion: 'v1alpha',
+});
+let model = 'lyria-realtime-exp';
+
+// GA4 Integration
+const GA_MEASUREMENT_ID: string =
+  (typeof process !== 'undefined' && process.env?.GA_MEASUREMENT_ID) ||
+  (typeof window !== 'undefined' && (window as any).process?.env?.GA_MEASUREMENT_ID) ||
+  (import.meta as any).env?.VITE_GA_MEASUREMENT_ID ||
+  '';
 
 if (GA_MEASUREMENT_ID) {
   // Initialize dataLayer and gtag function if they don't exist.
@@ -126,29 +163,26 @@ class PromptDj extends LitElement {
       align-items: flex-end;
       flex-shrink: 1;
       height: 100%;
-      gap: 2vmin;
-      margin-left: 10vmin; /* To somewhat center content with add button */
-      padding: 1vmin; /* Padding for scrollbar */
+      gap: 1.5vmin;
+      padding: 0.5vmin 1vmin;
       overflow-x: auto;
       overscroll-behavior-x: contain;
       touch-action: pan-x;
-      /* Custom scrollbar styling */
       scrollbar-width: thin;
-      scrollbar-color: #666 #1a1a1a;
+      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
     }
     #prompts-container::-webkit-scrollbar {
-      height: 8px;
+      height: 5px;
     }
     #prompts-container::-webkit-scrollbar-track {
-      background: #111; /* Or match prompts-area background */
-      border-radius: 4px;
+      background: transparent;
     }
     #prompts-container::-webkit-scrollbar-thumb {
-      background-color: #666;
+      background-color: rgba(255, 255, 255, 0.25);
       border-radius: 4px;
     }
     #prompts-container::-webkit-scrollbar-thumb:hover {
-      background-color: #777;
+      background-color: rgba(255, 255, 255, 0.4);
     }
     /* Add pseudo-elements for centering while keeping elements visible when scrolling */
     #prompts-container::before,
@@ -180,7 +214,7 @@ class PromptDj extends LitElement {
       justify-content: center;
       align-items: center;
       flex-shrink: 0; /* Prevent container from shrinking */
-      gap: 0.5vmin; /* Add a small gap between playback buttons */
+      gap: 0.8vmin; /* Add a small gap between playback buttons */
       flex-wrap: wrap; /* Allow wrapping for more controls */
     }
     play-pause-button,
@@ -189,17 +223,19 @@ class PromptDj extends LitElement {
     reset-button,
     record-button,
     record-fx-button,
+    mic-sync-button,
+    volume-button,
     info-button,
     settings-button, /* New */
     presets-button {
-      width: 12vmin;
+      width: clamp(38px, 9.5vmin, 56px);
       flex-shrink: 0;
     }
     prompt-controller {
       height: 100%;
       max-height: 80vmin; /* Max height for a prompt controller */
-      min-width: 14vmin; /* Min width for a prompt controller */
-      max-width: 16vmin; /* Max width for a prompt controller */
+      min-width: clamp(86px, 17vmin, 130px);
+      max-width: clamp(100px, 21vmin, 160px);
       flex: 1; /* Allow prompt to grow if few prompts, but also shrink */
     }
     .volume-control-container {
@@ -380,6 +416,9 @@ class PromptDj extends LitElement {
 
   @state() private isInfoModalOpen = false;
   @state() private isSettingsModalOpen = false; // New
+  @state() private isMicSyncModalOpen = false; // New for mic sync modal
+  @state() private currentBpm = 120;
+  @state() private currentScale: Scale = Scale.C_MAJOR_A_MINOR;
   @state() private isPresetManagerOpen = false; // New state for preset manager modal
   @state() private presets: Map<string, Preset> = new Map(); // New state for presets
 
@@ -410,6 +449,8 @@ class PromptDj extends LitElement {
 
   // Master Volume
   @state() private masterVolume = 1;
+  @state() private isMuted = false;
+  private previousVolumeBeforeMute = 1;
   private masterVolumeNode!: GainNode;
 
   // Auto Volume
@@ -470,7 +511,15 @@ class PromptDj extends LitElement {
   private flangerDryGain!: GainNode;
   private flangerOutputGain!: GainNode;
 
-  // EQ
+  // Wideband Graphic Equalizer (37 bands, 1 Hz - 25 kHz)
+  private multiBandEqInputGain!: GainNode;
+  private multiBandEqDryGain!: GainNode;
+  private multiBandEqWetGain!: GainNode;
+  private multiBandEqNodes: BiquadFilterNode[] = [];
+  private multiBandEqPreampGain!: GainNode;
+  private multiBandEqOutputGain!: GainNode;
+
+  // Single Parametric Filter / EQ
   private eqInputGain!: GainNode;
   private eqDryGain!: GainNode;
   private eqWetGain!: GainNode;
@@ -649,9 +698,7 @@ class PromptDj extends LitElement {
   };
 
   override async firstUpdated() {
-    await this.connectToSession();
     this._setupVinylPlayer();
-    this.setSessionPrompts();
     if (this.settingsController) {
        this.currentConfig = this.settingsController.getAppConfig();
        // SettingsController is the source of truth for all defaults (model + UI effects)
@@ -916,7 +963,53 @@ class PromptDj extends LitElement {
     this.flangerDryGain.connect(this.flangerOutputGain);
     this.flangerLFO.start();
 
-    // EQ
+    // Wideband Graphic Equalizer (37 bands from 1 Hz to 25 kHz)
+    this.multiBandEqInputGain = this.audioContext.createGain();
+    this.multiBandEqDryGain = this.audioContext.createGain();
+    this.multiBandEqWetGain = this.audioContext.createGain();
+    this.multiBandEqPreampGain = this.audioContext.createGain();
+    this.multiBandEqOutputGain = this.audioContext.createGain();
+
+    this.multiBandEqWetGain.gain.value = 0;
+    this.multiBandEqDryGain.gain.value = 1;
+    this.multiBandEqPreampGain.gain.value = 1;
+
+    this.multiBandEqInputGain.connect(this.multiBandEqDryGain);
+    this.multiBandEqDryGain.connect(this.multiBandEqOutputGain);
+    this.multiBandEqInputGain.connect(this.multiBandEqWetGain);
+
+    const maxSampleFreq = Math.floor((this.audioContext.sampleRate / 2) - 1);
+    this.multiBandEqNodes = [];
+    let lastEqStage: AudioNode = this.multiBandEqWetGain;
+
+    for (let i = 0; i < EQ_BAND_FREQUENCIES.length; i++) {
+        const targetFreq = EQ_BAND_FREQUENCIES[i];
+        const safeFreq = Math.max(1, Math.min(targetFreq, maxSampleFreq));
+        const filterNode = this.audioContext.createBiquadFilter();
+
+        if (i === 0) {
+            filterNode.type = 'lowshelf';
+            filterNode.Q.value = 0.707;
+        } else if (i === EQ_BAND_FREQUENCIES.length - 1) {
+            filterNode.type = 'highshelf';
+            filterNode.Q.value = 0.707;
+        } else {
+            filterNode.type = 'peaking';
+            filterNode.Q.value = 1.414;
+        }
+
+        filterNode.frequency.value = safeFreq;
+        filterNode.gain.value = 0;
+
+        lastEqStage.connect(filterNode);
+        lastEqStage = filterNode;
+        this.multiBandEqNodes.push(filterNode);
+    }
+
+    lastEqStage.connect(this.multiBandEqPreampGain);
+    this.multiBandEqPreampGain.connect(this.multiBandEqOutputGain);
+
+    // Parametric Filter / EQ
     this.eqInputGain = this.audioContext.createGain();
     this.eqDryGain = this.audioContext.createGain();
     this.eqWetGain = this.audioContext.createGain();
@@ -1021,7 +1114,8 @@ class PromptDj extends LitElement {
     this.chorusOutputGain.connect(this.echoUiInputGain);
     this.echoUiOutputGain.connect(this.reverbUiInputGain);
     this.reverbUiOutputGain.connect(this.flangerInputGain);
-    this.flangerOutputGain.connect(this.eqInputGain);
+    this.flangerOutputGain.connect(this.multiBandEqInputGain);
+    this.multiBandEqOutputGain.connect(this.eqInputGain);
     this.eqOutputGain.connect(this.compressorInputGain);
     this.compressorOutputGain.connect(this.phaserInputGain);
     this.phaserOutputGain.connect(this.tremoloInputGain);
@@ -1064,7 +1158,12 @@ class PromptDj extends LitElement {
     this.recordedFxAudioChunks.push(interleavedData.slice());
   }
 
-  private handleConnectionError() {
+  private handleConnectionError(customReason?: string) {
+    djLog('error', 'handleConnectionError triggered', {
+      customReason,
+      playbackState: this.playbackState,
+      continuousPlayback: this.continuousPlaybackEnabled,
+    });
     if (this.isReconnecting || this.isCheckingInternet) {
       return;
     }
@@ -1093,7 +1192,7 @@ class PromptDj extends LitElement {
       }
     } else {
       // Original behavior if continuous playback is OFF
-      this.toastMessage.show('Connection error, please restart audio.');
+      this.toastMessage.show(customReason || 'Connection error, please restart audio.');
       if (this.stabilizerEnabled && (this.playbackState === 'playing' || this.playbackState === 'loading')) {
         // Fade out and then stop
         if (this.isStabilizerFadingOut) return;
@@ -1114,144 +1213,172 @@ class PromptDj extends LitElement {
 
 
   private async connectToSession() {
-    this.session = await ai.live.music.connect({
-      model: model,
-      callbacks: {
-        onmessage: async (e: LiveMusicServerMessage) => {
-          if (ENABLE_LOGGING) console.log('Received message from the server: %s\n', e);
-          if (e.setupComplete) {
-            this.connectionError = false;
-             // A successful message means connection is good. Reset any reconnection logic.
-            this.stopReconnectionAttempts();
-          }
-          if (e.filteredPrompt) {
-            this.filteredPrompts = new Set([
-              ...this.filteredPrompts,
-              e.filteredPrompt.text,
-            ]);
-            this.toastMessage.show(e.filteredPrompt.filteredReason);
-          }
-          
-          const audioChunk = e.serverContent?.audioChunks?.[0];
-          if (audioChunk?.data) {
-             // We have a working connection if we receive audio.
-            this.stopReconnectionAttempts();
-
-            // If silence filler was active and music is arriving, stop the vinyl
-            if (this.silenceFillerEnabled && !this.isVinylPlaying && this.vinylSourceNode) {
-                this._stopVinyl(3.0);
-            }
-
-            if (
-              this.playbackState === 'paused' ||
-              this.playbackState === 'stopped'
-            )
-              return;
-
-            const audioData = audioChunk.data;
-            if (this.isRecording && (this.playbackState === 'playing' || this.playbackState === 'loading')) {
-                try {
-                    const decodedChunk = decode(audioData);
-                    this.recordedAudioChunks.push(decodedChunk);
-                } catch (err) {
-                    if (ENABLE_LOGGING) console.error('Error decoding audio chunk for recording:', err);
-                    this.toastMessage.show('Error processing audio for recording.');
-                }
-            }
-
-            const audioBuffer = await decodeAudioData(
-              decode(audioData),
-              this.audioContext,
-              this.sampleRate,
-              2, // Lyria is stereo
-            );
-            const source = this.audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(this.stabilizerFadeNode);
-
-            if (this.stabilizerEnabled) {
-              this.isStabilizerFadingOut = false; // New audio arrived, so we are not fading out.
-              // This handles fade-in from an underrun, but not for the very first play.
-              if (this.stabilizerFadeNode.gain.value < 1.0 && this.nextStartTime > 0) {
-                const FADE_DURATION_SECONDS = 3.0;
-                this.stabilizerFadeNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-                this.stabilizerFadeNode.gain.setValueAtTime(this.stabilizerFadeNode.gain.value, this.audioContext.currentTime);
-                this.stabilizerFadeNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + FADE_DURATION_SECONDS);
-              }
-            }
-
-
-            if (this.nextStartTime === 0) { // First chunk since 'play' was pressed
-              const bufferTime = this.getBufferTime();
-              const FADE_IN_DURATION = 3.0;
-              
-              // Schedule the audio to start playing after the buffer time.
-              this.nextStartTime = this.audioContext.currentTime + bufferTime;
-              
-              // Schedule the master fade-in to start exactly when the audio starts.
-              this.outputNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-              this.outputNode.gain.setValueAtTime(0.0001, this.nextStartTime);
-              this.outputNode.gain.linearRampToValueAtTime(1, this.nextStartTime + FADE_IN_DURATION);
-
-              // Also schedule the stabilizer node to fade in. This ensures both start in sync.
-              this.stabilizerFadeNode.gain.cancelScheduledValues(this.audioContext.currentTime);
-              this.stabilizerFadeNode.gain.setValueAtTime(0.0001, this.nextStartTime);
-              this.stabilizerFadeNode.gain.linearRampToValueAtTime(1, this.nextStartTime + FADE_IN_DURATION);
-
-
-              setTimeout(() => {
-                if (this.playbackState === 'loading') {
-                     this.playbackState = 'playing';
-                     this.stopAutoRestartTimer();
-                }
-              }, bufferTime * 1000);
-            }
-
-            if (this.nextStartTime < this.audioContext.currentTime) {
-              if (ENABLE_LOGGING) console.log('under run');
-              this.playbackState = 'loading';
-              this.startAutoRestartTimer();
-              this.nextStartTime = 0;
-              return;
-            }
-            source.start(this.nextStartTime);
-            this.nextStartTime += audioBuffer.duration;
-          }
-        },
-        onerror: (e: ErrorEvent) => {
-          if (this.isReconnecting) return;
-          if (ENABLE_LOGGING) console.log('Error occurred: %s\n', JSON.stringify(e));
-          this.handleConnectionError();
-        },
-        onclose: (e: CloseEvent) => {
-          if (this.isReconnecting) return;
-          if (ENABLE_LOGGING) console.log('Connection closed.');
-          this.handleConnectionError();
-        },
-      },
+    djLog('info', 'Connecting to Gemini Live Music...', {
+      model,
+      keyLength: API_KEY ? API_KEY.length : 0,
+      keyPrefix: API_KEY ? API_KEY.slice(0, 8) + '...' : 'none',
+      audioContextState: this.audioContext.state,
     });
-    if (this.settingsController) {
-        const initialSettings = this.settingsController.getAppConfig() as AppLiveMusicGenerationConfig;
-        this.currentConfig = initialSettings;
-        await this.session.setMusicGenerationConfig({musicGenerationConfig: this._stripUiEffects(initialSettings)});
-        this._applyAudioSettings(initialSettings);
+    if (!API_KEY) {
+      djLog('error', 'API_KEY is empty! Cannot connect to Live Music.');
+      throw new Error('API-ключ отсутствует в конфигурации');
+    }
+
+    try {
+      this.session = await ai.live.music.connect({
+        model: model,
+        callbacks: {
+          onmessage: async (e: LiveMusicServerMessage) => {
+            if (e.setupComplete) {
+              djLog('success', 'Server message: setupComplete received!');
+              this.connectionError = false;
+              this.stopReconnectionAttempts();
+            }
+            if (e.filteredPrompt) {
+              djLog('warn', 'Prompt filtered by safety filter:', e.filteredPrompt);
+              this.filteredPrompts = new Set([
+                ...this.filteredPrompts,
+                e.filteredPrompt.text,
+              ]);
+              this.toastMessage.show(e.filteredPrompt.filteredReason);
+            }
+            
+            const audioChunk = e.serverContent?.audioChunks?.[0];
+            if (audioChunk?.data) {
+              djLog('success', 'Received audio chunk from Lyria!', {
+                dataLength: audioChunk.data.length,
+                playbackState: this.playbackState,
+              });
+              this.stopReconnectionAttempts();
+
+              if (this.silenceFillerEnabled && !this.isVinylPlaying && this.vinylSourceNode) {
+                  this._stopVinyl(3.0);
+              }
+
+              if (
+                this.playbackState === 'paused' ||
+                this.playbackState === 'stopped'
+              )
+                return;
+
+              const audioData = audioChunk.data;
+              if (this.isRecording && (this.playbackState === 'playing' || this.playbackState === 'loading')) {
+                  try {
+                      const decodedChunk = decode(audioData);
+                      this.recordedAudioChunks.push(decodedChunk);
+                  } catch (err) {
+                      djLog('error', 'Error decoding audio chunk for recording:', err);
+                      this.toastMessage.show('Error processing audio for recording.');
+                  }
+              }
+
+              const audioBuffer = await decodeAudioData(
+                decode(audioData),
+                this.audioContext,
+                this.sampleRate,
+                2, // Lyria is stereo
+              );
+              djLog('info', `Audio buffer decoded: duration=${audioBuffer.duration.toFixed(2)}s`);
+              const source = this.audioContext.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(this.stabilizerFadeNode);
+
+              if (this.stabilizerEnabled) {
+                this.isStabilizerFadingOut = false;
+                if (this.stabilizerFadeNode.gain.value < 1.0 && this.nextStartTime > 0) {
+                  const FADE_DURATION_SECONDS = 3.0;
+                  this.stabilizerFadeNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+                  this.stabilizerFadeNode.gain.setValueAtTime(this.stabilizerFadeNode.gain.value, this.audioContext.currentTime);
+                  this.stabilizerFadeNode.gain.linearRampToValueAtTime(1, this.audioContext.currentTime + FADE_DURATION_SECONDS);
+                }
+              }
+
+              if (this.nextStartTime === 0) {
+                const bufferTime = this.getBufferTime();
+                const FADE_IN_DURATION = 3.0;
+                this.nextStartTime = this.audioContext.currentTime + bufferTime;
+                djLog('info', `First chunk: scheduled playback at ${this.nextStartTime.toFixed(2)}s (bufferTime=${bufferTime}s)`);
+
+                this.outputNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+                this.outputNode.gain.setValueAtTime(0.0001, this.nextStartTime);
+                this.outputNode.gain.linearRampToValueAtTime(1, this.nextStartTime + FADE_IN_DURATION);
+
+                this.stabilizerFadeNode.gain.cancelScheduledValues(this.audioContext.currentTime);
+                this.stabilizerFadeNode.gain.setValueAtTime(0.0001, this.nextStartTime);
+                this.stabilizerFadeNode.gain.linearRampToValueAtTime(1, this.nextStartTime + FADE_IN_DURATION);
+
+                setTimeout(() => {
+                  if (this.playbackState === 'loading') {
+                       this.playbackState = 'playing';
+                       this.stopAutoRestartTimer();
+                       djLog('success', 'Playback state changed to playing!');
+                  }
+                }, bufferTime * 1000);
+              }
+
+              if (this.nextStartTime < this.audioContext.currentTime) {
+                djLog('warn', `Buffer underrun: nextStartTime=${this.nextStartTime.toFixed(2)} < currentTime=${this.audioContext.currentTime.toFixed(2)}`);
+                this.playbackState = 'loading';
+                this.startAutoRestartTimer();
+                this.nextStartTime = 0;
+                return;
+              }
+              source.start(this.nextStartTime);
+              this.nextStartTime += audioBuffer.duration;
+            }
+          },
+          onerror: (e: any) => {
+            if (this.isReconnecting) return;
+            const errSummary = {
+              type: e?.type,
+              message: e?.message || e?.error?.message || 'WebSocket error event',
+            };
+            djLog('error', 'WebSocket onerror triggered!', errSummary);
+            if (this.playbackState === 'playing' || this.playbackState === 'loading') {
+              this.handleConnectionError('Ошибка сокета: ' + errSummary.message);
+            }
+          },
+          onclose: (e: CloseEvent) => {
+            if (this.isReconnecting) return;
+            djLog('warn', `WebSocket onclose: code=${e.code}, reason="${e.reason}", wasClean=${e.wasClean}`);
+            if (this.playbackState === 'playing' || this.playbackState === 'loading') {
+              const closeMsg = e.reason ? `Соединение закрыто: ${e.reason} (код ${e.code})` : `Соединение закрыто (код ${e.code})`;
+              this.handleConnectionError(closeMsg);
+            }
+          },
+        },
+      });
+
+      djLog('success', 'WebSocket connected to Gemini Lyria');
+
+      if (this.settingsController) {
+          const initialSettings = this.settingsController.getAppConfig() as AppLiveMusicGenerationConfig;
+          this.currentConfig = initialSettings;
+          const cleanConfig = this._stripUiEffects(initialSettings);
+          djLog('info', 'Sending clean musicGenerationConfig...', cleanConfig);
+          await this.session.setMusicGenerationConfig({musicGenerationConfig: cleanConfig});
+          this._applyAudioSettings(initialSettings);
+      }
+    } catch (connectErr: any) {
+      djLog('error', 'ai.live.music.connect() threw an error:', connectErr?.message || connectErr);
+      throw connectErr;
     }
   }
 
-  private _stripUiEffects(config: AppLiveMusicGenerationConfig): AppLiveMusicGenerationConfig {
-    const {
-        distortionEnabled, distortionAmount,
-        chorusEnabled, chorusRate, chorusDepth, chorusDelay, chorusFeedback,
-        echoUiEnabled, echoUiDelayTime, echoUiFeedback, echoUiMix,
-        reverbUiEnabled, reverbUiDelayTime, reverbUiDecay, reverbUiMix,
-        flangerEnabled, flangerRate, flangerDepth, flangerDelay, flangerFeedback,
-        eqEnabled, eqType, eqFrequency, eqQ, eqGain,
-        compressorEnabled, compressorThreshold, compressorKnee, compressorRatio, compressorAttack, compressorRelease,
-        phaserEnabled, phaserRate, phaserDepth, phaserFeedback, phaserStages, phaserBaseFrequency,
-        tremoloEnabled, tremoloRate, tremoloDepth,
-        stereoPhaseShiftAmount,
-        ...musicGenConfig
-    } = config;
+  private _stripUiEffects(config: AppLiveMusicGenerationConfig): LiveMusicGenerationConfig {
+    const musicGenConfig: LiveMusicGenerationConfig = {};
+    if (typeof config.temperature === 'number') musicGenConfig.temperature = config.temperature;
+    if (typeof config.topK === 'number') musicGenConfig.topK = config.topK;
+    if (typeof config.seed === 'number') musicGenConfig.seed = config.seed;
+    if (typeof config.guidance === 'number') musicGenConfig.guidance = config.guidance;
+    if (typeof config.bpm === 'number') musicGenConfig.bpm = config.bpm;
+    if (typeof config.density === 'number') musicGenConfig.density = config.density;
+    if (typeof config.brightness === 'number') musicGenConfig.brightness = config.brightness;
+    if (config.scale) musicGenConfig.scale = config.scale;
+    if (typeof config.muteBass === 'boolean') musicGenConfig.muteBass = config.muteBass;
+    if (typeof config.muteDrums === 'boolean') musicGenConfig.muteDrums = config.muteDrums;
+    if (typeof config.onlyBassAndDrums === 'boolean') musicGenConfig.onlyBassAndDrums = config.onlyBassAndDrums;
+    if (config.musicGenerationMode) musicGenConfig.musicGenerationMode = config.musicGenerationMode;
     return musicGenConfig;
   }
 
@@ -1364,7 +1491,27 @@ class PromptDj extends LitElement {
         this.flangerDelayNode.delayTime.setTargetAtTime(defaults.flangerDelay!, now, rampTime);
     }
 
-    // EQ
+    // Wideband Graphic Equalizer (37 bands, 1 Hz - 25 kHz)
+    const multiBandEqEnabled = config.multiBandEqEnabled ?? defaults.multiBandEqEnabled ?? false;
+    this.multiBandEqDryGain.gain.setTargetAtTime(multiBandEqEnabled ? 0 : 1, now, rampTime);
+    this.multiBandEqWetGain.gain.setTargetAtTime(multiBandEqEnabled ? 1 : 0, now, rampTime);
+
+    const preampDb = this._ensureFinite(config.multiBandEqPreamp, defaults.multiBandEqPreamp ?? 0);
+    const preampLinear = Math.pow(10, preampDb / 20);
+    this.multiBandEqPreampGain.gain.setTargetAtTime(preampLinear, now, rampTime);
+
+    const gains = config.multiBandEqGains || {};
+    for (let i = 0; i < EQ_BAND_FREQUENCIES.length; i++) {
+        const freq = EQ_BAND_FREQUENCIES[i];
+        const node = this.multiBandEqNodes[i];
+        if (node) {
+            const rawGain = gains[freq] ?? 0;
+            const bandGain = multiBandEqEnabled ? this._ensureFinite(rawGain, 0) : 0;
+            node.gain.setTargetAtTime(bandGain, now, rampTime);
+        }
+    }
+
+    // Parametric Filter / EQ
     const eqEnabled = config.eqEnabled ?? defaults.eqEnabled ?? false;
     this.eqDryGain.gain.setTargetAtTime(eqEnabled ? 0 : 1, now, rampTime);
     this.eqWetGain.gain.setTargetAtTime(eqEnabled ? 1 : 0, now, rampTime);
@@ -1500,14 +1647,28 @@ class PromptDj extends LitElement {
 
   private setSessionPrompts = throttle(async () => {
     if (!this.session) return;
-    const promptsToSend = Array.from(this.prompts.values()).filter((p) => {
+    let promptsToSend = Array.from(this.prompts.values()).filter((p) => {
       return !this.filteredPrompts.has(p.text) && p.weight !== 0;
     });
+    if (promptsToSend.length === 0 && this.prompts.size > 0) {
+      const firstPrompt = Array.from(this.prompts.values())[0];
+      firstPrompt.weight = 1;
+      promptsToSend = [firstPrompt];
+      this.dispatchPromptsChange();
+    }
+    if (promptsToSend.length === 0) return;
     try {
+      const cleanPrompts = promptsToSend.map((p) => ({
+        text: p.text,
+        weight: Number(p.weight),
+      }));
+      djLog('info', 'Sending weightedPrompts to Lyria...', cleanPrompts);
       await this.session.setWeightedPrompts({
-        weightedPrompts: promptsToSend,
+        weightedPrompts: cleanPrompts,
       });
+      djLog('success', 'weightedPrompts accepted by Lyria server');
     } catch (e: any) {
+      djLog('error', 'setWeightedPrompts failed:', e?.message || e);
       this.toastMessage.show(e.message);
       this.pauseAudio();
     }
@@ -1583,16 +1744,43 @@ class PromptDj extends LitElement {
   }
 
   private async handlePlayPause() {
+    djLog('info', 'handlePlayPause called', {
+      currentState: this.playbackState,
+      audioContextState: this.audioContext.state,
+      connectionError: this.connectionError,
+      hasSession: !!this.session,
+    });
     this.stopReconnectionAttempts();
+    if (this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+        djLog('info', 'AudioContext resumed successfully. State: ' + this.audioContext.state);
+      } catch (e) {
+        djLog('error', 'AudioContext resume failed:', e);
+      }
+    }
+
     if (this.playbackState === 'playing') {
       this.pauseAudio();
     } else if (
       this.playbackState === 'paused' ||
       this.playbackState === 'stopped'
     ) {
-      if (this.connectionError) {
-        await this.connectToSession();
-        this.setSessionPrompts();
+      const isSessionActive = this.session && (this.session as any).conn?.readyState === 1;
+      djLog('info', 'Checking session status:', { isSessionActive, connectionError: this.connectionError });
+      if (!isSessionActive || this.connectionError) {
+        try {
+          this.connectionError = false;
+          await this.connectToSession();
+          await this.setSessionPrompts();
+        } catch (err: any) {
+          djLog('error', 'Connection failed in handlePlayPause:', err);
+          this.connectionError = true;
+          this.toastMessage?.show(err?.message ? `Ошибка подключения: ${err.message}` : 'Ошибка подключения. Откройте Инфо для просмотра логов.');
+          return;
+        }
+      } else {
+        await this.setSessionPrompts();
       }
       this.loadAudio();
       this.sendGaEvent('start_music_generation', { model_id: model });
@@ -1633,6 +1821,7 @@ class PromptDj extends LitElement {
   }
 
   private loadAudio() {
+    djLog('info', 'loadAudio() called: calling session.play()');
     this.audioContext.resume();
     // Reset the next start time whenever we begin loading a new stream.
     // This is crucial for restarts and reconnections to ensure the first
@@ -1652,7 +1841,12 @@ class PromptDj extends LitElement {
         this.stabilizerFadeNode.gain.value = 0.0001;
     }
 
-    this.session?.play();
+    try {
+      this.session?.play();
+      djLog('success', 'session.play() sent to Lyria server');
+    } catch (err: any) {
+      djLog('error', 'session.play() failed:', err?.message || err);
+    }
     this.playbackState = 'loading';
     this.startBufferCheck();
     this.startAutoRestartTimer();
@@ -1827,7 +2021,11 @@ class PromptDj extends LitElement {
         this.stopRecordingFxAndSave();
     }
     if (this.connectionError || !this.session) {
-      await this.connectToSession();
+      try {
+        await this.connectToSession();
+      } catch (e) {
+        if (ENABLE_LOGGING) console.warn('Reset connection error:', e);
+      }
     }
     this.pauseAudio();
     this.session?.resetContext();
@@ -1861,8 +2059,12 @@ class PromptDj extends LitElement {
 
       if (this.playbackState === 'stopped' || this.playbackState === 'paused') {
         if (this.connectionError || !this.session) {
-            await this.connectToSession();
-            this.setSessionPrompts();
+            try {
+              await this.connectToSession();
+              this.setSessionPrompts();
+            } catch (e) {
+              if (ENABLE_LOGGING) console.warn('Record connection error:', e);
+            }
         }
         this.loadAudio();
       }
@@ -1922,8 +2124,12 @@ class PromptDj extends LitElement {
       this.audioContext.resume();
       if (this.playbackState === 'stopped' || this.playbackState === 'paused') {
         if (this.connectionError || !this.session) {
-          await this.connectToSession();
-          this.setSessionPrompts();
+          try {
+            await this.connectToSession();
+            this.setSessionPrompts();
+          } catch (e) {
+            if (ENABLE_LOGGING) console.warn('Record FX connection error:', e);
+          }
         }
         this.loadAudio(); // This will set playbackState to 'loading' then 'playing'
       }
@@ -1986,17 +2192,35 @@ class PromptDj extends LitElement {
     }
   }
 
+  private setMasterVolume(newVolume: number) {
+    this.masterVolume = Math.max(0, Math.min(1, newVolume));
+    if (this.masterVolume > 0) {
+      this.isMuted = false;
+    }
+  
+    if (this.autoVolumeEnabled) {
+      this.startAutoVolumeModulation();
+    } else {
+      const vol = this.isMuted ? 0 : this.masterVolume;
+      this.masterVolumeNode?.gain?.setTargetAtTime(vol, this.audioContext?.currentTime || 0, 0.01);
+    }
+  }
+
+  private handleVolumeMuteToggle = () => {
+    if (this.isMuted || this.masterVolume === 0) {
+      this.isMuted = false;
+      this.setMasterVolume(this.previousVolumeBeforeMute > 0 ? this.previousVolumeBeforeMute : 1);
+    } else {
+      this.previousVolumeBeforeMute = this.masterVolume;
+      this.isMuted = true;
+      this.masterVolumeNode?.gain?.setTargetAtTime(0, this.audioContext?.currentTime || 0, 0.01);
+    }
+  };
+
   private handleVolumeChange(e: Event) {
     const target = e.target as HTMLInputElement;
     const newVolume = target.valueAsNumber;
-    this.masterVolume = newVolume;
-  
-    if (this.autoVolumeEnabled) {
-      // Restart the modulation cycle with the new master volume as the peak
-      this.startAutoVolumeModulation();
-    } else {
-      this.masterVolumeNode.gain.setTargetAtTime(this.masterVolume, this.audioContext.currentTime, 0.01);
-    }
+    this.setMasterVolume(newVolume);
   }
 
   private renderVolumeIcon() {
@@ -2004,7 +2228,7 @@ class PromptDj extends LitElement {
     const speakerMute = svg`<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>`;
 
     return html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-      ${this.masterVolume > 0 ? speakerOn : speakerMute}
+      ${!this.isMuted && this.masterVolume > 0 ? speakerOn : speakerMute}
     </svg>`;
   }
 
@@ -2222,7 +2446,10 @@ class PromptDj extends LitElement {
       id: `preset-${Date.now()}`,
       name: e.detail.name,
       prompts: Array.from(this.prompts.values()).map(p => ({...p})), // Deep copy prompts
-      settings: { ...this.currentConfig }, // Deep copy current settings
+      settings: {
+        ...this.currentConfig,
+        multiBandEqGains: this.currentConfig.multiBandEqGains ? { ...this.currentConfig.multiBandEqGains } : undefined,
+      },
       autoDensity: this.settingsController.autoDensity,
       autoBrightness: this.settingsController.autoBrightness,
     };
@@ -2462,6 +2689,37 @@ class PromptDj extends LitElement {
     }
   }
 
+  private async handleApplyMicSync(e: CustomEvent<{ bpm: number; scale: Scale; scaleLabel: string }>) {
+    const { bpm, scale, scaleLabel } = e.detail;
+    this.currentBpm = bpm;
+    this.currentScale = scale;
+
+    if (this.settingsController) {
+      const cfg = this.settingsController.getAppConfig();
+      cfg.bpm = bpm;
+      cfg.scale = scale;
+      this.settingsController.setAppConfig(cfg);
+    }
+
+    this.currentConfig = {
+      ...this.currentConfig,
+      bpm,
+      scale,
+    };
+
+    if (this.session) {
+      try {
+        const cleanConfig = this._stripUiEffects(this.currentConfig);
+        await this.session.setMusicGenerationConfig({ musicGenerationConfig: cleanConfig });
+        this.toastMessage.show(`Ритм установлен: ${bpm} BPM (${scaleLabel})`);
+      } catch (err: any) {
+        console.warn('Could not apply mic sync to session:', err);
+      }
+    } else {
+      this.toastMessage.show(`Ритм установлен: ${bpm} BPM (${scaleLabel}). Нажмите Play!`);
+    }
+  }
+
   private handleVinylSettingChanged(e: CustomEvent<{key: string, value: number | boolean}>) {
       const { key, value } = e.detail;
       switch (key) {
@@ -2571,23 +2829,18 @@ class PromptDj extends LitElement {
               .recording=${this.isRecordingFx}
               @click=${this.handleRecordFxToggle}
               title="Record Audio With FX"></record-fx-button>
+          <mic-sync-button
+              @click=${() => this.isMicSyncModalOpen = true}
+              title="Захват ритма и мотива с микрофона (BPM & Scale)"></mic-sync-button>
           <reset-button @click=${this.handleReset} title="Reset Settings and Audio"></reset-button>
           <settings-button @click=${() => this.isSettingsModalOpen = true} title="Open Settings"></settings-button>
-          <div class="volume-control-container">
-              ${this.renderVolumeIcon()}
-              <input
-                  type="range"
-                  class="volume-slider"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  .value=${String(this.masterVolume)}
-                  @input=${this.handleVolumeChange}
-                  style="--value-percent: ${this.masterVolume * 100}%"
-                  aria-label="Master Volume"
-                  title="Master Volume"
-              />
-          </div>
+          <info-button @click=${() => this.isInfoModalOpen = true} title="Справка & Вики (F.A.Q. и руководство)"></info-button>
+          <volume-button
+              .volume=${this.isMuted ? 0 : this.masterVolume}
+              .isMuted=${this.isMuted}
+              @volume-change=${(e: CustomEvent<{ volume: number }>) => this.setMasterVolume(e.detail.volume)}
+              @volume-mute-toggle=${this.handleVolumeMuteToggle}
+              title="Громкость (наведение/клик для слайдера, колесо мыши для регулировки)"></volume-button>
         </div>
         <div class="playback-container">
           <div class="stabilizer-container" title="Автоматически переподключаться при обрыве связи">
@@ -2604,8 +2857,8 @@ class PromptDj extends LitElement {
       <toast-message></toast-message>
       <info-modal
         .active=${this.isInfoModalOpen}
+        .supportedStyles=${PROMPT_TEXT_PRESETS.join(', ')}
         @closed=${() => this.isInfoModalOpen = false}>
-        ${this.renderInfoModalContent()}
       </info-modal>
       <settings-modal
         .active=${this.isSettingsModalOpen}
@@ -2626,6 +2879,13 @@ class PromptDj extends LitElement {
             .autoVolumeMinLevelPercent=${this.autoVolumeMinLevelPercent}
           ></settings-controller>
       </settings-modal>
+      <mic-sync-modal
+        .active=${this.isMicSyncModalOpen}
+        .currentAppBpm=${this.currentBpm}
+        .currentAppScale=${this.currentScale}
+        @closed=${() => this.isMicSyncModalOpen = false}
+        @apply-sync=${this.handleApplyMicSync}
+      ></mic-sync-modal>
       <preset-manager-modal
         .active=${this.isPresetManagerOpen}
         .presets=${this.presets}
@@ -2782,6 +3042,10 @@ declare global {
     'weight-slider': import('./components/weight-slider').WeightSlider;
     'toast-message': import('./components/toast-message').ToastMessage;
     'info-modal': import('./components/info-modal').InfoModal;
+    'info-button': import('./components/info-button').InfoButton;
+    'mic-sync-button': import('./components/mic-sync-button').MicSyncButton;
+    'mic-sync-modal': import('./components/mic-sync-modal').MicSyncModal;
+    'volume-button': import('./components/volume-button').VolumeButton;
     'settings-modal': import('./components/settings-modal').SettingsModal; // New
     'preset-manager-modal': import('./components/preset-manager-modal').PresetManagerModal; // New
     'confirmation-modal': import('./components/confirmation-modal').ConfirmationModal; // New

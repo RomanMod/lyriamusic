@@ -724,6 +724,87 @@ export class SettingsController extends LitElement {
     .eq-freq-badge.mid { color: #ffdd28; }
     .eq-freq-badge.high { color: #3dffab; }
     .eq-freq-badge.air { color: #ff25f6; }
+
+    /* BPM Controls Styles */
+    .bpm-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .bpm-badge-val {
+      font-family: monospace;
+      font-size: 14px;
+      font-weight: bold;
+      color: #2af6de;
+    }
+    .bpm-controls-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .bpm-controls-row input[type="range"] {
+      flex: 1;
+    }
+    .bpm-step-btn {
+      width: 36px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: #eee;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      user-select: none;
+      padding: 0;
+      line-height: 1;
+    }
+    .bpm-step-btn:hover:not(:disabled) {
+      background: #5200ff;
+      border-color: #2af6de;
+      color: #fff;
+      transform: scale(1.05);
+    }
+    .bpm-step-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+    .bpm-step-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .bpm-genre-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-left: auto;
+    }
+    .bpm-chip-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #bbb;
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .bpm-chip-btn:hover {
+      background: rgba(42, 246, 222, 0.18);
+      border-color: rgba(42, 246, 222, 0.5);
+      color: #2af6de;
+    }
+    .bpm-chip-btn.active {
+      background: rgba(82, 0, 255, 0.45);
+      border-color: #5200ff;
+      color: #fff;
+    }
   `;
 
   private readonly defaultConfig: AppLiveMusicGenerationConfig = {
@@ -796,6 +877,7 @@ export class SettingsController extends LitElement {
   @state() private currentView: string = 'main';
   @state() private activeEqMode: 'multiband' | 'parametric' = 'multiband';
   @state() private eqCategoryFilter: 'all' | EqCategory = 'all';
+  @state() lastDefinedBpm: number = 120;
 
   public getAppConfig(): AppLiveMusicGenerationConfig {
     const currentFullConfig = {...this._config};
@@ -814,6 +896,7 @@ export class SettingsController extends LitElement {
     if (!this.autoDensity) this.lastDefinedDensity = newConfig.density;
     this.autoBrightness = newConfig.brightness === undefined;
     if (!this.autoBrightness) this.lastDefinedBrightness = newConfig.brightness;
+    if (typeof newConfig.bpm === 'number') this.lastDefinedBpm = newConfig.bpm;
     this.requestUpdate('_config');
   }
 
@@ -821,6 +904,7 @@ export class SettingsController extends LitElement {
     this._config = {...this.defaultConfig};
     this.autoDensity = true;
     this.autoBrightness = true;
+    this.lastDefinedBpm = 120;
     this._config.density = undefined;
     this._config.brightness = undefined;
     this.dispatchSettingsChange();
@@ -917,6 +1001,45 @@ export class SettingsController extends LitElement {
     const key = target.id.replace('auto-volume-', '');
     const value = target.type === 'checkbox' ? target.checked : (target.valueAsNumber || (key === 'frequency' || key === 'interval' ? 0 : this.autoVolumeMinLevelPercent));
     this.dispatchEvent(new CustomEvent('auto-volume-setting-changed', {detail: { key, value }}));
+  }
+
+  private handleBpmSliderInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const val = input.valueAsNumber;
+    this.lastDefinedBpm = val;
+    const newConfig = { ...this._config, bpm: val };
+    this._config = newConfig;
+    this.updateSliderBackground(input);
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private adjustBpm(delta: number, e?: MouseEvent) {
+    const step = e && e.shiftKey ? (delta > 0 ? 5 : -5) : delta;
+    const current = this._config.bpm ?? this.lastDefinedBpm ?? 120;
+    const next = Math.max(60, Math.min(200, current + step));
+    this.lastDefinedBpm = next;
+    const newConfig = { ...this._config, bpm: next };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private handleAutoBpmToggle(e: Event) {
+    const checkbox = e.target as HTMLInputElement;
+    const isAuto = checkbox.checked;
+    const newConfig = { ...this._config, bpm: isAuto ? undefined : (this.lastDefinedBpm ?? 120) };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  private setBpm(val: number) {
+    this.lastDefinedBpm = val;
+    const newConfig = { ...this._config, bpm: val };
+    this._config = newConfig;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
   }
 
   protected override updated(changedProperties: PropertyValues) {
@@ -1039,9 +1162,66 @@ export class SettingsController extends LitElement {
         <label for="seed">Seed</label>
         <input type="text" id="seed" .value=${cfg.seed === undefined ? '' : String(cfg.seed)} @input=${this.handleInputChange} placeholder="Auto" />
       </div>
-      <div class="setting">
-        <label for="bpm">BPM</label>
-        <input type="number" id="bpm" min="60" max="180" .value=${cfg.bpm === undefined ? '' : String(cfg.bpm)} @input=${this.handleInputChange} placeholder="Auto (60-180)" />
+      <div class="setting bpm-setting-box" auto=${(cfg.bpm === undefined).toString()}>
+        <div class="bpm-header-row">
+          <label for="bpm">BPM (Темп)</label>
+          <span class="bpm-badge-val">${cfg.bpm === undefined ? 'Auto' : `${cfg.bpm} BPM`}</span>
+        </div>
+        <div class="bpm-controls-row">
+          <button
+            type="button"
+            class="bpm-step-btn"
+            ?disabled=${cfg.bpm === undefined}
+            @click=${(e: MouseEvent) => this.adjustBpm(-1, e)}
+            title="-1 BPM (Shift: -5 BPM)"
+          >−</button>
+          <input
+            type="range"
+            id="bpm"
+            min="60"
+            max="200"
+            step="1"
+            .value=${String(cfg.bpm ?? this.lastDefinedBpm ?? 120)}
+            ?disabled=${cfg.bpm === undefined}
+            @input=${this.handleBpmSliderInput}
+          />
+          <button
+            type="button"
+            class="bpm-step-btn"
+            ?disabled=${cfg.bpm === undefined}
+            @click=${(e: MouseEvent) => this.adjustBpm(1, e)}
+            title="+1 BPM (Shift: +5 BPM)"
+          >+</button>
+        </div>
+        <div class="auto-row">
+          <input
+            type="checkbox"
+            id="auto-bpm"
+            .checked=${cfg.bpm === undefined}
+            @change=${this.handleAutoBpmToggle}
+          />
+          <label for="auto-bpm">Auto</label>
+          <div class="bpm-genre-chips">
+            ${[
+              { bpm: 80, label: '80 Lofi' },
+              { bpm: 100, label: '100 Hip-Hop' },
+              { bpm: 120, label: '120 House' },
+              { bpm: 128, label: '128 EDM' },
+              { bpm: 140, label: '140 Dubstep' },
+              { bpm: 174, label: '174 DnB' },
+            ].map(
+              (chip) => html`
+                <button
+                  type="button"
+                  class="bpm-chip-btn ${cfg.bpm === chip.bpm ? 'active' : ''}"
+                  @click=${() => this.setBpm(chip.bpm)}
+                >
+                  ${chip.label}
+                </button>
+              `
+            )}
+          </div>
+        </div>
       </div>
       <div class="setting" auto=${this.autoDensity.toString()}>
         <label for="density">Density</label>

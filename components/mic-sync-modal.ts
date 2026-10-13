@@ -284,7 +284,34 @@ export class MicSyncModal extends LitElement {
     .slider-wrap {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+    }
+    .bpm-step-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: #eee;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      user-select: none;
+      padding: 0;
+      line-height: 1;
+    }
+    .bpm-step-btn:hover {
+      background: #5200ff;
+      border-color: #2af6de;
+      color: #fff;
+      transform: scale(1.08);
+    }
+    .bpm-step-btn:active {
+      transform: scale(0.92);
     }
     input[type='range'] {
       accent-color: #2af6de;
@@ -496,6 +523,12 @@ export class MicSyncModal extends LitElement {
     if (this.autoApplyLive) this.emitApply();
   }
 
+  private adjustDetectedBpm(delta: number, e?: MouseEvent) {
+    const step = e && e.shiftKey ? (delta > 0 ? 5 : -5) : delta;
+    this.detectedBpm = Math.max(60, Math.min(200, this.detectedBpm + step));
+    if (this.autoApplyLive) this.emitApply();
+  }
+
   private handleScaleSelect(e: Event) {
     const val = (e.target as HTMLSelectElement).value as Scale;
     this.detectedScale = val;
@@ -662,6 +695,12 @@ export class MicSyncModal extends LitElement {
             <div class="setting-item">
               <span class="setting-label">Точная подстройка BPM:</span>
               <div class="slider-wrap">
+                <button
+                  type="button"
+                  class="bpm-step-btn"
+                  @click=${(e: MouseEvent) => this.adjustDetectedBpm(-1, e)}
+                  title="-1 BPM (Shift: -5 BPM)"
+                >−</button>
                 <input
                   type="range"
                   min="60"
@@ -670,7 +709,13 @@ export class MicSyncModal extends LitElement {
                   .value=${String(this.detectedBpm)}
                   @input=${this.handleBpmSlider}
                 />
-                <span style="font-weight: bold; width: 40px; color: #2af6de;">${this.detectedBpm}</span>
+                <button
+                  type="button"
+                  class="bpm-step-btn"
+                  @click=${(e: MouseEvent) => this.adjustDetectedBpm(1, e)}
+                  title="+1 BPM (Shift: +5 BPM)"
+                >+</button>
+                <span style="font-weight: bold; width: 44px; color: #2af6de; text-align: center;">${this.detectedBpm}</span>
               </div>
             </div>
 

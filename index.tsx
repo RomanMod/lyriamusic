@@ -325,6 +325,90 @@ class PromptDj extends LitElement {
         background: #fff;
     }
 
+    .bpm-control-container {
+      display: flex;
+      align-items: center;
+      gap: 0.8vmin;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      padding: 0.4vmin 1.2vmin;
+      user-select: none;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+    }
+    .bpm-label {
+      font-size: 13px;
+      font-weight: 800;
+      color: #aaa;
+      letter-spacing: 0.5px;
+      margin-right: 2px;
+    }
+    .bpm-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: #eee;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      padding: 0;
+      line-height: 1;
+    }
+    .bpm-btn:hover {
+      background: #5200ff;
+      border-color: #2af6de;
+      color: #fff;
+      transform: scale(1.1);
+    }
+    .bpm-btn:active {
+      transform: scale(0.92);
+    }
+    .bpm-slider {
+      width: clamp(75px, 14vmin, 130px);
+      height: 6px;
+      accent-color: #2af6de;
+      cursor: pointer;
+      margin: 0 4px;
+    }
+    .bpm-display-badge {
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: 800;
+      color: #2af6de;
+      min-width: 32px;
+      text-align: center;
+    }
+    .bpm-display-badge.auto {
+      color: #ffdd28;
+    }
+    .bpm-auto-toggle {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #888;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .bpm-auto-toggle:hover {
+      color: #fff;
+      border-color: #aaa;
+    }
+    .bpm-auto-toggle.active {
+      background: rgba(255, 221, 40, 0.2);
+      border-color: rgba(255, 221, 40, 0.5);
+      color: #ffdd28;
+    }
+
     .stabilizer-container {
       display: flex;
       align-items: center;

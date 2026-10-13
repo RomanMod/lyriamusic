@@ -37,7 +37,7 @@ const apiKey = resolveApiKey();
 const gaId = process.env.VITE_GA_MEASUREMENT_ID || process.env.GA_MEASUREMENT_ID || '';
 
 export default defineConfig({
-  base: '/',
+  base: '/lyriamusic/',
   server: {
     host: '0.0.0.0',
     port: 3000,

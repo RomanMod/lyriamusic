@@ -742,7 +742,8 @@ class PromptDj extends LitElement {
         this.vinylGainNode.gain.value = this.vinylVolume;
         this.vinylGainNode.connect(this.audioContext.destination);
 
-        const response = await fetch('./vinil.mp3');
+        const vinylUrl = `${import.meta.env.BASE_URL}vinil.mp3`;
+        const response = await fetch(vinylUrl);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }

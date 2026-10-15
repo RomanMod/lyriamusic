@@ -96,6 +96,9 @@ export interface AppLiveMusicGenerationConfig extends ImportedLiveMusicGeneratio
 
   // Stereo Phase Shift (Right Channel)
   stereoPhaseShiftAmount?: number; // 0 (0 deg) to 1 (360 deg), where 0.5 is 180 deg
+
+  // Eco / Lightweight Mode for weak hardware & mobile
+  ecoMode?: boolean; // Lightweight mode to eliminate audio stuttering on low-end devices
 }
 
 export interface Prompt {

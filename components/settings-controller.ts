@@ -805,6 +805,129 @@ export class SettingsController extends LitElement {
       border-color: #5200ff;
       color: #fff;
     }
+
+    /* Eco Mode Banner for Weak Hardware */
+    .eco-banner {
+      background: linear-gradient(135deg, rgba(20, 24, 34, 0.95), rgba(14, 16, 24, 0.95));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      transition: all 0.25s ease;
+    }
+    .eco-banner.active {
+      background: linear-gradient(135deg, rgba(14, 38, 34, 0.96), rgba(9, 24, 22, 0.98));
+      border-color: rgba(42, 246, 222, 0.65);
+      box-shadow: 0 4px 22px rgba(42, 246, 222, 0.18), inset 0 1px 0 rgba(42, 246, 222, 0.25);
+    }
+    .eco-banner-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .eco-info-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .eco-status-tag {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #888;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .eco-status-tag.tag-active {
+      background: rgba(42, 246, 222, 0.18);
+      color: #2af6de;
+      border-color: rgba(42, 246, 222, 0.5);
+      text-shadow: 0 0 8px rgba(42, 246, 222, 0.4);
+    }
+    .eco-banner-heading {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .eco-switch-btn {
+      position: relative;
+      width: 72px;
+      height: 28px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      transition: all 0.2s ease;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .eco-switch-btn:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    .eco-switch-btn.active {
+      background: linear-gradient(90deg, #059669, #0d9488);
+      border-color: #2af6de;
+      box-shadow: 0 0 10px rgba(42, 246, 222, 0.4);
+    }
+    .eco-switch-knob {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateX(0);
+    }
+    .eco-switch-btn.active .eco-switch-knob {
+      transform: translateX(44px);
+    }
+    .eco-switch-label {
+      position: absolute;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      right: 8px;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .eco-switch-btn.active .eco-switch-label {
+      right: auto;
+      left: 10px;
+    }
+    .eco-banner-desc {
+      font-size: 12px;
+      line-height: 1.45;
+      color: #aaa;
+    }
+    .eco-banner.active .eco-banner-desc {
+      color: #c7eee7;
+    }
+    .eco-badges-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+    .eco-pill {
+      font-size: 11px;
+      background: rgba(42, 246, 222, 0.12);
+      border: 1px solid rgba(42, 246, 222, 0.25);
+      color: #a4f7ec;
+      border-radius: 5px;
+      padding: 2px 8px;
+      font-weight: 500;
+    }
   `;
 
   private readonly defaultConfig: AppLiveMusicGenerationConfig = {
@@ -857,9 +980,13 @@ export class SettingsController extends LitElement {
     tremoloRate: 5,
     tremoloDepth: 0.5,
     stereoPhaseShiftAmount: 0,
+    ecoMode: false,
   };
 
-  @state() private _config: AppLiveMusicGenerationConfig = {...this.defaultConfig};
+  @state() private _config: AppLiveMusicGenerationConfig = {
+    ...this.defaultConfig,
+    ecoMode: typeof localStorage !== 'undefined' ? localStorage.getItem('lyria_eco_mode') === 'true' : false,
+  };
   @state() autoDensity = true;
   @state() lastDefinedDensity: number | undefined = 0.5;
   @state() autoBrightness = true;
@@ -901,12 +1028,30 @@ export class SettingsController extends LitElement {
   }
 
   public resetToDefaults() {
-    this._config = {...this.defaultConfig};
+    const preservedEco = this._config.ecoMode ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('lyria_eco_mode') === 'true' : false);
+    this._config = {
+      ...this.defaultConfig,
+      ecoMode: preservedEco,
+    };
     this.autoDensity = true;
     this.autoBrightness = true;
     this.lastDefinedBpm = 120;
     this._config.density = undefined;
     this._config.brightness = undefined;
+    this.dispatchSettingsChange();
+    this.requestUpdate();
+  }
+
+  public toggleEcoMode() {
+    const current = !!(this._config.ecoMode ?? this.defaultConfig.ecoMode);
+    const newEco = !current;
+    this._config = {
+      ...this._config,
+      ecoMode: newEco,
+    };
+    try {
+      localStorage.setItem('lyria_eco_mode', newEco ? 'true' : 'false');
+    } catch (_) {}
     this.dispatchSettingsChange();
     this.requestUpdate();
   }
@@ -1096,6 +1241,7 @@ export class SettingsController extends LitElement {
 
   private renderMainView() {
     const cfg = this._config;
+    const isEco = !!(cfg.ecoMode ?? this.defaultConfig.ecoMode);
     const buttonClasses = {
       'model-mix': (cfg.echoMix ?? 0) > 0 || (cfg.reverbMix ?? 0) > 0,
       'distortion': cfg.distortionEnabled ?? false,
@@ -1120,6 +1266,38 @@ export class SettingsController extends LitElement {
         </div>
       </div>
       <div class="main-view-content">
+        <!-- Eco Mode Banner for weak hardware -->
+        <div class="eco-banner ${isEco ? 'active' : ''}">
+          <div class="eco-banner-top">
+            <div class="eco-info-title">
+              <span class="eco-status-tag ${isEco ? 'tag-active' : ''}">
+                ${isEco ? '⚡ АКТИВЕН' : '⚡ ВЫКЛЮЧЕН'}
+              </span>
+              <span class="eco-banner-heading">Облегченный режим (Eco Mode)</span>
+            </div>
+            <button
+              class="eco-switch-btn ${isEco ? 'active' : ''}"
+              @click=${this.toggleEcoMode}
+              title="Переключить облегченный режим для слабых ПК и смартфонов"
+            >
+              <span class="eco-switch-knob"></span>
+              <span class="eco-switch-label">${isEco ? 'ВКЛ' : 'ВЫКЛ'}</span>
+            </button>
+          </div>
+          <div class="eco-banner-desc">
+            Разработан специально для слабых компьютеров, старых процессоров и смартфонов:
+            расширяет защитный буфер аудиопотока (предотвращая «рваный» звук), активирует мягкую синхронизацию при скачках и отключает тяжелый оверсэмплинг DSP.
+          </div>
+          ${isEco ? html`
+            <div class="eco-badges-row">
+              <span class="eco-pill">🛡️ Защитный буфер: 4.5–6.5 сек</span>
+              <span class="eco-pill">⚡ Мягкая компенсация джиттера</span>
+              <span class="eco-pill">📉 DSP без тяжелого 4x оверсэмплинга</span>
+              <span class="eco-pill">❄️ Снижение нагрева и нагрузки CPU</span>
+            </div>
+          ` : ''}
+        </div>
+
         <div class="settings-grid">
             <h4 class="grid-header">Параметры генерации модели</h4>
             <button class="grid-button" @click=${() => this.currentView = 'music-controls'}>Music Controls</button>
@@ -1139,7 +1317,8 @@ export class SettingsController extends LitElement {
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['auto-volume']})} @click=${() => this.currentView = 'auto-volume'}>Auto Volume</button>
             <button class=${classMap({'grid-button': true, 'active-effect': buttonClasses['stereo-phase']})} @click=${() => this.currentView = 'stereo-phase'}>Stereo Phase</button>
 
-            <h4 class="grid-header">Приложение</h4>
+            <h4 class="grid-header">Приложение & Оптимизация</h4>
+            <button class=${classMap({'grid-button': true, 'active-effect': isEco})} @click=${this.toggleEcoMode}>⚡ Облегченный режим: ${isEco ? 'ВКЛ' : 'ВЫКЛ'}</button>
             <button class="grid-button" @click=${this._handleOpenPresets}>Управление пресетами</button>
             <button class="grid-button" @click=${this._handleOpenInfo}>Информация</button>
         </div>

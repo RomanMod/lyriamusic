@@ -464,6 +464,14 @@ class PromptDj extends LitElement {
       -ms-transform: translateX(2.1vmin);
       transform: translateX(2.1vmin);
     }
+    .stabilizer-container.eco-active label {
+      color: #2af6de;
+      text-shadow: 0 0 6px rgba(42, 246, 222, 0.4);
+      font-weight: 600;
+    }
+    .stabilizer-container.eco-active input:checked + .slider {
+      background-color: #059669;
+    }
   `;
 
   @property({
@@ -479,9 +487,43 @@ class PromptDj extends LitElement {
   );
   private outputNode: GainNode = this.audioContext.createGain();
   private nextStartTime = 0;
+
+  @state() private ecoMode: boolean = typeof localStorage !== 'undefined' ? localStorage.getItem('lyria_eco_mode') === 'true' : false;
   
   private getBufferTime(): number {
+    if (this.ecoMode) {
+      return this.stabilizerEnabled ? 6.5 : 4.5;
+    }
     return this.stabilizerEnabled ? 5.0 : 2.0;
+  }
+
+  public setEcoMode(enabled: boolean, notify = false) {
+    this.ecoMode = enabled;
+    try {
+      localStorage.setItem('lyria_eco_mode', enabled ? 'true' : 'false');
+    } catch (_) {}
+    document.body.classList.toggle('eco-mode', enabled);
+    if (this.currentConfig) {
+      this.currentConfig.ecoMode = enabled;
+    }
+    if (this.settingsController) {
+      const cfg = this.settingsController.getAppConfig();
+      if (cfg.ecoMode !== enabled) {
+        this.settingsController.setAppConfig({ ...cfg, ecoMode: enabled });
+      }
+    }
+    if (this.distortionNode) {
+      const distortionEnabled = this.currentConfig?.distortionEnabled ?? false;
+      this.distortionNode.oversample = (enabled || !distortionEnabled) ? 'none' : '4x';
+    }
+    if (notify && this.toastMessage) {
+      this.toastMessage.show(
+        enabled
+          ? '⚡ Облегченный режим включен: увеличен защитный буфер, снижена нагрузка на CPU'
+          : '⚡ Облегченный режим выключен: стандартный режим'
+      );
+    }
+    this.requestUpdate();
   }
 
   @state() private playbackState: PlaybackState = 'stopped';
@@ -515,6 +557,8 @@ class PromptDj extends LitElement {
   private stabilizerFadeNode!: GainNode; // For graceful buffering
   private effectsChainInput!: GainNode;
   private effectsChainOutput!: GainNode;
+  private effectsChainBypassGain!: GainNode; // Smart bypass when all effects disabled
+  private effectsChainWetGain!: GainNode;    // Routes audio into effects only when active
   @state() private stabilizerEnabled = true;
   private bufferCheckInterval?: number;
   private isStabilizerFadingOut = false;
@@ -783,6 +827,9 @@ class PromptDj extends LitElement {
 
   override async firstUpdated() {
     this._setupVinylPlayer();
+    if (this.ecoMode) {
+      document.body.classList.add('eco-mode');
+    }
     if (this.settingsController) {
        this.currentConfig = this.settingsController.getAppConfig();
        // SettingsController is the source of truth for all defaults (model + UI effects)
@@ -1193,8 +1240,19 @@ class PromptDj extends LitElement {
     this.stereoPhaseProcessingGainNode.connect(this.stereoPhaseMergerNode, 0, 1);
     this.stereoPhaseMergerNode.connect(this.stereoPhaseShiftOutputGain);
 
-    // Connect the chain:
-    this.effectsChainInput.connect(this.distortionInputGain);
+    // Connect the chain with Smart Bypass (zero-overhead when all effects are disabled):
+    this.effectsChainBypassGain = this.audioContext.createGain();
+    this.effectsChainWetGain = this.audioContext.createGain();
+    this.effectsChainBypassGain.gain.value = 1; // Default: bypassed directly to output
+    this.effectsChainWetGain.gain.value = 0;
+
+    // Direct 1-hop dry path:
+    this.effectsChainInput.connect(this.effectsChainBypassGain);
+    this.effectsChainBypassGain.connect(this.effectsChainOutput);
+
+    // Wet effects chain path:
+    this.effectsChainInput.connect(this.effectsChainWetGain);
+    this.effectsChainWetGain.connect(this.distortionInputGain);
     this.distortionOutputGain.connect(this.chorusInputGain);
     this.chorusOutputGain.connect(this.echoUiInputGain);
     this.echoUiOutputGain.connect(this.reverbUiInputGain);
@@ -1380,9 +1438,9 @@ class PromptDj extends LitElement {
 
               if (this.nextStartTime === 0) {
                 const bufferTime = this.getBufferTime();
-                const FADE_IN_DURATION = 3.0;
+                const FADE_IN_DURATION = this.ecoMode ? 1.5 : 3.0;
                 this.nextStartTime = this.audioContext.currentTime + bufferTime;
-                djLog('info', `First chunk: scheduled playback at ${this.nextStartTime.toFixed(2)}s (bufferTime=${bufferTime}s)`);
+                djLog('info', `First chunk: scheduled playback at ${this.nextStartTime.toFixed(2)}s (bufferTime=${bufferTime}s, ecoMode=${this.ecoMode})`);
 
                 this.outputNode.gain.cancelScheduledValues(this.audioContext.currentTime);
                 this.outputNode.gain.setValueAtTime(0.0001, this.nextStartTime);
@@ -1401,15 +1459,31 @@ class PromptDj extends LitElement {
                 }, bufferTime * 1000);
               }
 
-              if (this.nextStartTime < this.audioContext.currentTime) {
-                djLog('warn', `Buffer underrun: nextStartTime=${this.nextStartTime.toFixed(2)} < currentTime=${this.audioContext.currentTime.toFixed(2)}`);
-                this.playbackState = 'loading';
-                this.startAutoRestartTimer();
-                this.nextStartTime = 0;
-                return;
+              const currentTime = this.audioContext.currentTime;
+              const lag = currentTime - this.nextStartTime;
+
+              if (lag > 0) {
+                // Device experienced jitter/pause (GC, decode latency, weak CPU)
+                const softJitterThreshold = this.ecoMode ? 3.0 : 0.9;
+                if (lag < softJitterThreshold) {
+                  // Resilient soft recovery: schedule immediately with a tiny offset to avoid audio dropout
+                  const recoveryOffset = this.ecoMode ? 0.04 : 0.025;
+                  const playAt = currentTime + recoveryOffset;
+                  djLog('warn', `Soft jitter recovery (no dropout): lag=${lag.toFixed(3)}s, playing at ${playAt.toFixed(2)}s`);
+                  source.start(playAt);
+                  this.nextStartTime = playAt + audioBuffer.duration;
+                } else {
+                  // Real gap exceeding the safety limit
+                  djLog('warn', `Buffer underrun: lag=${lag.toFixed(2)}s > threshold (${softJitterThreshold}s)`);
+                  this.playbackState = 'loading';
+                  this.startAutoRestartTimer();
+                  this.nextStartTime = 0;
+                  return;
+                }
+              } else {
+                source.start(this.nextStartTime);
+                this.nextStartTime += audioBuffer.duration;
               }
-              source.start(this.nextStartTime);
-              this.nextStartTime += audioBuffer.duration;
             }
           },
           onerror: (e: any) => {
@@ -1487,6 +1561,10 @@ class PromptDj extends LitElement {
     const defaults = this.defaultConfigValues;
 
 
+    if (typeof config.ecoMode === 'boolean' && config.ecoMode !== this.ecoMode) {
+      this.setEcoMode(config.ecoMode);
+    }
+
     // Distortion
     const distortionEnabled = config.distortionEnabled ?? defaults.distortionEnabled ?? false;
     let distortionAmountFinal = 0;
@@ -1495,7 +1573,8 @@ class PromptDj extends LitElement {
       let currentDistAmount = config.distortionAmount ?? defaultDistAmount;
       distortionAmountFinal = this._ensureFinite(currentDistAmount, defaultDistAmount);
     }
-    this.distortionNode.curve = this._makeDistortionCurve(distortionAmountFinal);
+    this.distortionNode.curve = distortionEnabled ? this._makeDistortionCurve(distortionAmountFinal) : null;
+    this.distortionNode.oversample = (this.ecoMode || !distortionEnabled) ? 'none' : '4x';
 
 
     // Chorus
@@ -1727,6 +1806,25 @@ class PromptDj extends LitElement {
     let phaseGainValue = Math.cos(currentPhaseShift * 2 * Math.PI);
     phaseGainValue = this._ensureFinite(phaseGainValue, 1); // Default to gain 1 (0 or 360 deg) if Math.cos is non-finite (unlikely with finite input)
     this.stereoPhaseProcessingGainNode.gain.setTargetAtTime(phaseGainValue, now, rampTime);
+
+    // Smart Master Effects Bypass:
+    // If no client-side audio effects are enabled at all, bypass the entire 40-node chain with zero overhead!
+    const hasActiveEffects = !!(
+      distortionEnabled ||
+      chorusEnabled ||
+      echoUiEnabled ||
+      reverbUiEnabled ||
+      flangerEnabled ||
+      multiBandEqEnabled ||
+      eqEnabled ||
+      compressorEnabled ||
+      phaserEnabled ||
+      tremoloEnabled ||
+      currentPhaseShift !== 0
+    );
+
+    this.effectsChainBypassGain.gain.setTargetAtTime(hasActiveEffects ? 0 : 1, now, rampTime);
+    this.effectsChainWetGain.gain.setTargetAtTime(hasActiveEffects ? 1 : 0, now, rampTime);
 }
 
 
@@ -1802,16 +1900,26 @@ class PromptDj extends LitElement {
   }
 
 
-  /** Generates radial gradients for each prompt based on weight and color. */
-  private makeBackground() {
-    const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+  private cachedBackgroundKey = '';
+  private cachedBackgroundCss = '';
 
+  /** Generates radial gradients for each prompt based on weight and color (memoized). */
+  private makeBackground() {
+    let key = '';
+    for (const p of this.prompts.values()) {
+      key += `${p.promptId}:${p.weight.toFixed(3)}:${p.color};`;
+    }
+    if (key === this.cachedBackgroundKey && this.cachedBackgroundCss) {
+      return this.cachedBackgroundCss;
+    }
+
+    const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
     const MAX_WEIGHT = 0.5;
     const MAX_ALPHA = 0.6;
-
     const bg: string[] = [];
 
-    [...this.prompts.values()].forEach((p, i) => {
+    let i = 0;
+    for (const p of this.prompts.values()) {
       const alphaPct = clamp01(p.weight / MAX_WEIGHT) * MAX_ALPHA;
       const alpha = Math.round(alphaPct * 0xff)
         .toString(16)
@@ -1823,9 +1931,12 @@ class PromptDj extends LitElement {
       const s = `radial-gradient(circle at ${x * 100}% ${y * 100}%, ${p.color}${alpha} 0px, ${p.color}00 ${stop * 100}%)`;
 
       bg.push(s);
-    });
+      i++;
+    }
 
-    return bg.join(', ');
+    this.cachedBackgroundKey = key;
+    this.cachedBackgroundCss = bg.join(', ');
+    return this.cachedBackgroundCss;
   }
 
   private async handlePlayPause() {
@@ -2086,13 +2197,16 @@ class PromptDj extends LitElement {
 
   private updateSettings = throttle(
     async (e: CustomEvent<AppLiveMusicGenerationConfig>) => {
-      if (!this.session) return;
       const newConfig = e.detail;
       this.currentConfig = newConfig;
+      if (typeof newConfig.ecoMode === 'boolean' && newConfig.ecoMode !== this.ecoMode) {
+        this.setEcoMode(newConfig.ecoMode);
+      }
+      this._applyAudioSettings(newConfig);
+      if (!this.session) return;
       await this.session.setMusicGenerationConfig({
         musicGenerationConfig: this._stripUiEffects(newConfig),
       });
-      this._applyAudioSettings(newConfig);
     },
     200,
   );
@@ -2326,7 +2440,7 @@ class PromptDj extends LitElement {
             return;
         }
 
-        const FADE_THRESHOLD_SECONDS = 3.0;
+        const FADE_THRESHOLD_SECONDS = this.ecoMode ? 2.5 : 1.5;
         const FADE_DURATION_SECONDS = 3.0;
         const bufferRemaining = this.nextStartTime - this.audioContext.currentTime;
 
@@ -2928,6 +3042,15 @@ class PromptDj extends LitElement {
               title="Громкость (наведение/клик для слайдера, колесо мыши для регулировки)"></volume-button>
         </div>
         <div class="playback-container">
+          <div class="stabilizer-container ${this.ecoMode ? 'eco-active' : ''}" title="Облегченный режим: увеличенный защитный буфер и оптимизация DSP для слабых устройств и смартфонов (устраняет заикания и рваный звук)">
+              <label for="eco-mode-toggle">⚡ Облегченный</label>
+              <label class="switch">
+                  <input type="checkbox" id="eco-mode-toggle"
+                      .checked=${this.ecoMode}
+                      @change=${(e: Event) => this.setEcoMode((e.target as HTMLInputElement).checked, true)}>
+                  <span class="slider"></span>
+              </label>
+          </div>
           <div class="stabilizer-container" title="Автоматически переподключаться при обрыве связи">
               <label for="continuous-playback-toggle">Непрерывно</label>
               <label class="switch">

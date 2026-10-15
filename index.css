@@ -13,3 +13,19 @@ body.dragging * {
   user-select: none;
   pointer-events: none;
 }
+
+/* Eco Mode Optimizations for Weak Hardware & Low-Power Devices */
+body.eco-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.eco-mode .modal-overlay {
+  background-color: rgba(0, 0, 0, 0.92) !important;
+}
+
+body.eco-mode .modal-content,
+body.eco-mode .settings-container,
+body.eco-mode .page-container {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9) !important;
+}

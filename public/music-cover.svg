@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="discGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="40%" stop-color="#0f172a" />
+      <stop offset="85%" stop-color="#050714" />
+      <stop offset="100%" stop-color="#020308" />
+    </radialGradient>
+    <radialGradient id="centerLabel" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="60%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </radialGradient>
+    <linearGradient id="glowRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="50%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="64" fill="#090d16" />
+  <circle cx="256" cy="256" r="216" fill="url(#discGrad)" stroke="url(#glowRing)" stroke-width="4" />
+  <!-- Grooves -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2" />
+  <circle cx="256" cy="256" r="165" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1.5" />
+  <circle cx="256" cy="256" r="140" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2" />
+  <circle cx="256" cy="256" r="115" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1.5" />
+  <!-- Center Label -->
+  <circle cx="256" cy="256" r="76" fill="url(#centerLabel)" />
+  <circle cx="256" cy="256" r="20" fill="#090d16" stroke="rgba(255,255,255,0.4)" stroke-width="3" />
+  <!-- DJ Text -->
+  <text x="256" y="222" font-family="system-ui, sans-serif" font-size="22" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="3">PROMPT DJ</text>
+  <text x="256" y="295" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="rgba(255,255,255,0.85)" text-anchor="middle" letter-spacing="1">GEMINI LIVE AI</text>
+</svg>

@@ -1000,6 +1000,7 @@ export class SettingsController extends LitElement {
   @property({type: Boolean}) autoVolumeEnabled = false;
   @property({type: Number}) autoVolumeFrequencyHz = 1 / (8 * 60);
   @property({type: Number}) autoVolumeMinLevelPercent = 60;
+  @property({type: Boolean}) keepScreenOn = true;
   
   @state() private currentView: string = 'main';
   @state() private activeEqMode: 'multiband' | 'parametric' = 'multiband';
@@ -1231,6 +1232,10 @@ export class SettingsController extends LitElement {
       </div>`;
   }
 
+  private handleToggleKeepScreenOn() {
+    this.dispatchEvent(new CustomEvent('toggle-keep-screen-on', { bubbles: true, composed: true }));
+  }
+
   private _handleOpenPresets() {
     this.dispatchEvent(new CustomEvent('open-presets-manager', { bubbles: true, composed: true }));
   }
@@ -1319,6 +1324,7 @@ export class SettingsController extends LitElement {
 
             <h4 class="grid-header">Приложение & Оптимизация</h4>
             <button class=${classMap({'grid-button': true, 'active-effect': isEco})} @click=${this.toggleEcoMode}>⚡ Облегченный режим: ${isEco ? 'ВКЛ' : 'ВЫКЛ'}</button>
+            <button class=${classMap({'grid-button': true, 'active-effect': this.keepScreenOn})} @click=${this.handleToggleKeepScreenOn}>📱 Не гасить экран: ${this.keepScreenOn ? 'ВКЛ' : 'ВЫКЛ'}</button>
             <button class="grid-button" @click=${this._handleOpenPresets}>Управление пресетами</button>
             <button class="grid-button" @click=${this._handleOpenInfo}>Информация</button>
         </div>

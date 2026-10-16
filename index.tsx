@@ -148,14 +148,85 @@ class PromptDj extends LitElement {
       z-index: -1;
       background: #111;
     }
-    .prompts-area {
+    .prompts-area-wrapper {
+      position: relative;
       display: flex;
       align-items: flex-end;
       justify-content: center;
       flex: 4;
       width: 100%;
-      margin-top: 2vmin;
-      gap: 2vmin;
+      margin-top: 1.5vmin;
+      min-height: 0;
+    }
+    .prompts-nav-btn {
+      position: absolute;
+      top: 45%;
+      transform: translateY(-50%);
+      z-index: 30;
+      width: clamp(34px, 4.5vmin, 44px);
+      height: clamp(34px, 4.5vmin, 44px);
+      border-radius: 50%;
+      background: rgba(18, 22, 34, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: clamp(22px, 3vmin, 28px);
+      font-weight: 300;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.2);
+      user-select: none;
+    }
+    .prompts-nav-btn.visible {
+      opacity: 0.95;
+      pointer-events: auto;
+    }
+    .prompts-nav-btn:hover {
+      opacity: 1;
+      background: rgba(82, 0, 255, 0.85);
+      border-color: #2af6de;
+      transform: translateY(-50%) scale(1.12);
+      box-shadow: 0 0 20px rgba(42, 246, 222, 0.5), 0 6px 20px rgba(0, 0, 0, 0.7);
+    }
+    .prompts-nav-btn:active {
+      transform: translateY(-50%) scale(0.94);
+    }
+    .prompts-nav-btn.prev {
+      left: 1vmin;
+    }
+    .prompts-nav-btn.next {
+      right: calc(clamp(38px, 9.5vmin, 56px) + 3vmin);
+    }
+    .prompts-edge-shadow-left,
+    .prompts-edge-shadow-right {
+      position: absolute;
+      top: 0;
+      bottom: 12px;
+      width: 40px;
+      pointer-events: none;
+      z-index: 15;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      border-radius: 8px;
+    }
+    .prompts-edge-shadow-left {
+      left: 0;
+      background: linear-gradient(to right, rgba(17, 17, 17, 0.95), transparent);
+    }
+    .prompts-edge-shadow-right {
+      right: calc(clamp(38px, 9.5vmin, 56px) + 2vmin);
+      background: linear-gradient(to left, rgba(17, 17, 17, 0.95), transparent);
+    }
+    .prompts-edge-shadow-left.visible,
+    .prompts-edge-shadow-right.visible {
+      opacity: 1;
     }
     #prompts-container {
       display: flex;
@@ -164,25 +235,36 @@ class PromptDj extends LitElement {
       flex-shrink: 1;
       height: 100%;
       gap: 1.5vmin;
-      padding: 0.5vmin 1vmin;
+      padding: 0.5vmin 1vmin 1vmin 1vmin;
       overflow-x: auto;
       overscroll-behavior-x: contain;
       touch-action: pan-x;
       scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+      scrollbar-color: rgba(82, 0, 255, 0.6) rgba(15, 23, 42, 0.5);
+      scroll-behavior: smooth;
+    }
+    #prompts-container.is-grabbing {
+      cursor: grabbing !important;
+      user-select: none;
     }
     #prompts-container::-webkit-scrollbar {
-      height: 5px;
+      height: 8px;
     }
     #prompts-container::-webkit-scrollbar-track {
-      background: transparent;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 6px;
+      margin: 0 2vmin;
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
     #prompts-container::-webkit-scrollbar-thumb {
-      background-color: rgba(255, 255, 255, 0.25);
-      border-radius: 4px;
+      background: linear-gradient(90deg, #5200ff, #2af6de);
+      border-radius: 6px;
+      box-shadow: 0 0 8px rgba(42, 246, 222, 0.3);
+      cursor: pointer;
     }
     #prompts-container::-webkit-scrollbar-thumb:hover {
-      background-color: rgba(255, 255, 255, 0.4);
+      background: linear-gradient(90deg, #7028ff, #4effeb);
+      box-shadow: 0 0 12px rgba(42, 246, 222, 0.6);
     }
     /* Add pseudo-elements for centering while keeping elements visible when scrolling */
     #prompts-container::before,
@@ -472,6 +554,14 @@ class PromptDj extends LitElement {
     .stabilizer-container.eco-active input:checked + .slider {
       background-color: #059669;
     }
+    .stabilizer-container.screen-active label {
+      color: #38bdf8;
+      text-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+      font-weight: 600;
+    }
+    .stabilizer-container.screen-active input:checked + .slider {
+      background-color: #0284c7;
+    }
   `;
 
   @property({
@@ -573,7 +663,17 @@ class PromptDj extends LitElement {
   @state() private autoRestartCountdown: number | null = null;
   private autoRestartTimerId?: number;
   private autoRestartCountdownIntervalId?: number;
+  // Background Audio Anchor & Screen WakeLock (for lockscreen / screen-off playback)
+  private silentAudioElement: HTMLAudioElement | null = null;
+  private wakeLockSentinel: any = null;
+  @state() private keepScreenOn: boolean = typeof localStorage !== 'undefined' ? localStorage.getItem('promptdj_keep_screen_on') !== 'false' : true;
 
+  // Horizontal Channel Scrolling & Navigation Chevrons
+  @state() private canScrollLeft = false;
+  @state() private canScrollRight = false;
+  private isContainerDragging = false;
+  private containerDragStartX = 0;
+  private containerDragScrollLeft = 0;
 
   // Master Volume
   @state() private masterVolume = 1;
@@ -722,11 +822,21 @@ class PromptDj extends LitElement {
     this._setupAudioEffects();
     this._setupFxRecorder(); // New: setup for FX recording
     this.outputNode.connect(this.audioContext.destination);
+
+    // AudioContext interruption and auto-resume protection for screen-off/lockscreen
+    this.audioContext.addEventListener('statechange', () => {
+      djLog('info', `AudioContext state changed to: ${this.audioContext.state}`);
+      if ((this.audioContext.state === 'suspended' || (this.audioContext.state as any) === 'interrupted') && (this.playbackState === 'playing' || this.playbackState === 'loading')) {
+        this.audioContext.resume().catch(e => djLog('warn', 'AudioContext auto-resume failed:', e));
+      }
+    });
   }
 
   override connectedCallback() {
     super.connectedCallback();
-    window.addEventListener('visibilitychange', this.handleVisibilityChange);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('pageshow', this.handlePageShow);
+    window.addEventListener('pagehide', this.handlePageHide);
 
     // Telegram Mini App swipe-to-close prevention
     let touchstartY = 0;
@@ -783,10 +893,13 @@ class PromptDj extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('pageshow', this.handlePageShow);
+    window.removeEventListener('pagehide', this.handlePageHide);
     this.stopReconnectionAttempts(); // Clean up timers on component removal
     this.stopAutoVolumeModulation(false); // Clean up auto-volume timers
     clearTimeout(this.vinylFadeOutTimerId);
+    this._stopBackgroundAudio();
 
     // Clean up swipe prevention listeners
     if (this.boundTouchStartHandler) {
@@ -799,31 +912,208 @@ class PromptDj extends LitElement {
 
   private handleVisibilityChange = () => {
     if (document.visibilityState === 'visible') {
+      djLog('info', 'App visible again. Checking audio state...');
+      if (this.playbackState === 'playing' || this.playbackState === 'loading') {
+        this.requestWakeLock();
+        if (this.audioContext.state === 'suspended' || (this.audioContext.state as any) === 'interrupted') {
+          djLog('warn', 'Resuming AudioContext on visibility restore...');
+          this.audioContext.resume().catch(() => {});
+        }
+        if (this.silentAudioElement && this.silentAudioElement.paused) {
+          this.silentAudioElement.play().catch(() => {});
+        }
+      }
+
       // When the app becomes visible again, check if we were in an error state.
-      // This is crucial for recovering from long periods of inactivity (e.g., phone screen off)
-      // where background timers might not have fired reliably.
       if (this.connectionError && this.continuousPlaybackEnabled && !this.isReconnecting) {
         if (ENABLE_LOGGING) console.log('App is visible again. Attempting to reconnect due to a previous error.');
-        // Clear any pending timers and immediately try to reconnect.
         this.stopReconnectionAttempts();
         this.startInternetCheckLoop();
       }
 
       // If we are in the internet checking phase, re-trigger the check immediately
-      // to counter browser timer throttling.
       if (this.isCheckingInternet) {
         if (ENABLE_LOGGING) console.log('App is visible again. Immediately re-running internet check.');
-        // Clear any pending timer and run the check now.
         if (this.internetCheckIntervalId) {
             clearInterval(this.internetCheckIntervalId);
             this.internetCheckIntervalId = undefined;
         }
-        // Restart the loop immediately.
-        this.isCheckingInternet = false; // Allow startInternetCheckLoop to run again
+        this.isCheckingInternet = false;
         this.startInternetCheckLoop();
+      }
+    } else {
+      djLog('info', 'App hidden / screen off. Background audio anchor keeping stream alive.');
+      this.wakeLockSentinel = null;
+      if (this.playbackState === 'playing' || this.playbackState === 'loading') {
+        if (this.audioContext.state === 'suspended' || (this.audioContext.state as any) === 'interrupted') {
+          this.audioContext.resume().catch(() => {});
+        }
+        if (this.silentAudioElement && this.silentAudioElement.paused) {
+          this.silentAudioElement.play().catch(() => {});
+        }
+        this.updateMediaSession();
       }
     }
   };
+
+  private handlePageShow = () => {
+    if (this.playbackState === 'playing' || this.playbackState === 'loading') {
+      if (this.audioContext.state === 'suspended' || (this.audioContext.state as any) === 'interrupted') {
+        this.audioContext.resume().catch(() => {});
+      }
+      this.requestWakeLock();
+      if (this.silentAudioElement && this.silentAudioElement.paused) {
+        this.silentAudioElement.play().catch(() => {});
+      }
+    }
+  };
+
+  private handlePageHide = () => {
+    djLog('info', 'Pagehide event triggered.');
+  };
+
+  private _initSilentAudioAnchor() {
+    if (this.silentAudioElement && document.getElementById('promptdj-bg-anchor')) return;
+    try {
+      let audio = document.getElementById('promptdj-bg-anchor') as HTMLAudioElement | null;
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = 'promptdj-bg-anchor';
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('webkit-playsinline', '');
+        audio.loop = true;
+        audio.preload = 'auto';
+        // Valid 0.5-second 8kHz 8-bit mono silent PCM WAV (uncompressed zeroes)
+        audio.src = 'data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA=';
+        audio.volume = 0.001;
+        audio.style.position = 'fixed';
+        audio.style.top = '-9999px';
+        audio.style.left = '-9999px';
+        audio.style.opacity = '0';
+        audio.style.pointerEvents = 'none';
+        audio.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(audio);
+      }
+      this.silentAudioElement = audio;
+    } catch (err) {
+      djLog('warn', 'Failed to initialize silent audio anchor:', err);
+    }
+  }
+
+  private _startBackgroundAudio() {
+    this._initSilentAudioAnchor();
+    if (this.silentAudioElement) {
+      this.silentAudioElement.play().catch(e => {
+        djLog('warn', 'Background audio anchor play failed:', e);
+      });
+    }
+    this.updateMediaSession();
+    this.requestWakeLock();
+  }
+
+  private _stopBackgroundAudio() {
+    if (this.silentAudioElement) {
+      try {
+        this.silentAudioElement.pause();
+      } catch (_) {}
+    }
+    this.updateMediaSession();
+    this.releaseWakeLock();
+  }
+
+  private updateMediaSession() {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      const activePrompts = Array.from(this.prompts?.values() || [])
+        .filter(p => !this.filteredPrompts.has(p.text) && p.weight > 0)
+        .map(p => p.text)
+        .slice(0, 3)
+        .join(' + ');
+
+      const title = activePrompts ? `DJ: ${activePrompts}` : 'PromptDJ Live Music';
+      const isPlaying = this.playbackState === 'playing' || this.playbackState === 'loading';
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title,
+        artist: 'PromptDJ • Gemini Lyria AI',
+        album: `${this.currentBpm} BPM • Live Stream`,
+        artwork: [
+          { src: '/music-cover.svg', sizes: '512x512', type: 'image/svg+xml' },
+        ],
+      });
+
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : (this.playbackState === 'paused' ? 'paused' : 'none');
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        if (this.playbackState !== 'playing') {
+          this.handlePlayPause();
+        }
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        if (this.playbackState === 'playing') {
+          this.handlePlayPause();
+        }
+      });
+      navigator.mediaSession.setActionHandler('stop', () => {
+        this.pauseAudio();
+      });
+      try {
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          this.handleAddRandomPrompt();
+        });
+      } catch (_) {}
+      try {
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          this.handleReset();
+        });
+      } catch (_) {}
+    } catch (e) {
+      // Ignore unsupported media session actions
+    }
+  }
+
+  private async requestWakeLock() {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+    if (!this.keepScreenOn || (this.playbackState !== 'playing' && this.playbackState !== 'loading')) return;
+
+    try {
+      if (!this.wakeLockSentinel) {
+        this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+        this.wakeLockSentinel.addEventListener('release', () => {
+          this.wakeLockSentinel = null;
+        });
+        djLog('info', 'Screen WakeLock acquired (screen will stay awake while playing)');
+      }
+    } catch (err) {
+      // Wake lock can fail if battery saver is active or document is hidden
+    }
+  }
+
+  private releaseWakeLock() {
+    if (this.wakeLockSentinel) {
+      try {
+        this.wakeLockSentinel.release();
+      } catch (_) {}
+      this.wakeLockSentinel = null;
+      djLog('info', 'Screen WakeLock released');
+    }
+  }
+
+  public toggleKeepScreenOn() {
+    this.keepScreenOn = !this.keepScreenOn;
+    try {
+      localStorage.setItem('promptdj_keep_screen_on', this.keepScreenOn ? 'true' : 'false');
+    } catch (_) {}
+    if (this.keepScreenOn) {
+      if (this.playbackState === 'playing') this.requestWakeLock();
+      this.toastMessage?.show('📱 Не гасить экран: ВКЛЮЧЕНО (экран не уснет во время музыки)');
+    } else {
+      this.releaseWakeLock();
+      this.toastMessage?.show('📱 Не гасить экран: ВЫКЛЮЧЕНО (стандартный таймер экрана)');
+    }
+    this.requestUpdate();
+  }
 
   override async firstUpdated() {
     this._setupVinylPlayer();
@@ -835,6 +1125,24 @@ class PromptDj extends LitElement {
        // SettingsController is the source of truth for all defaults (model + UI effects)
        this.defaultConfigValues = this.settingsController.getDefaultConfig();
        this._applyAudioSettings(this.currentConfig);
+    }
+
+    const container = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    if (container) {
+      this.updateScrollButtonsState();
+      try {
+        const resizeObserver = new ResizeObserver(() => {
+          this.updateScrollButtonsState();
+        });
+        resizeObserver.observe(container);
+      } catch (_) {}
+    }
+  }
+
+  override updated(changedProperties: Map<string, any>) {
+    super.updated(changedProperties);
+    if (changedProperties.has('prompts')) {
+      setTimeout(() => this.updateScrollButtonsState(), 80);
     }
   }
 
@@ -1454,6 +1762,7 @@ class PromptDj extends LitElement {
                   if (this.playbackState === 'loading') {
                        this.playbackState = 'playing';
                        this.stopAutoRestartTimer();
+                       this._startBackgroundAudio();
                        djLog('success', 'Playback state changed to playing!');
                   }
                 }, bufferTime * 1000);
@@ -1850,6 +2159,7 @@ class PromptDj extends LitElement {
         weightedPrompts: cleanPrompts,
       });
       djLog('success', 'weightedPrompts accepted by Lyria server');
+      this.updateMediaSession();
     } catch (e: any) {
       djLog('error', 'setWeightedPrompts failed:', e?.message || e);
       this.toastMessage.show(e.message);
@@ -1962,6 +2272,7 @@ class PromptDj extends LitElement {
       this.playbackState === 'paused' ||
       this.playbackState === 'stopped'
     ) {
+      this._startBackgroundAudio();
       const isSessionActive = this.session && (this.session as any).conn?.readyState === 1;
       djLog('info', 'Checking session status:', { isSessionActive, connectionError: this.connectionError });
       if (!isSessionActive || this.connectionError) {
@@ -1987,6 +2298,7 @@ class PromptDj extends LitElement {
   }
 
   private pauseAudio() {
+    this._stopBackgroundAudio();
     this.stopReconnectionAttempts();
     this.stopAutoRestartTimer();
     if (this.isRecording) {
@@ -2019,6 +2331,7 @@ class PromptDj extends LitElement {
   private loadAudio() {
     djLog('info', 'loadAudio() called: calling session.play()');
     this.audioContext.resume();
+    this._startBackgroundAudio();
     // Reset the next start time whenever we begin loading a new stream.
     // This is crucial for restarts and reconnections to ensure the first
     // audio chunk is scheduled correctly and playback state is updated.
@@ -2049,6 +2362,7 @@ class PromptDj extends LitElement {
   }
 
   private stopAudio(resetGain = true) {
+    this._stopBackgroundAudio();
     this.stopReconnectionAttempts();
     this.stopAutoRestartTimer();
     if (this.isRecording) {
@@ -2115,6 +2429,7 @@ class PromptDj extends LitElement {
         selection?.addRange(range);
       }
     }
+    this.updateScrollButtonsState();
   }
 
   private async handleAddRandomPrompt() {
@@ -2163,6 +2478,7 @@ class PromptDj extends LitElement {
         selection?.addRange(range);
       }
     }
+    this.updateScrollButtonsState();
   }
 
   private handlePromptRemoved(e: CustomEvent<string>) {
@@ -2181,6 +2497,7 @@ class PromptDj extends LitElement {
       this.prompts = newPrompts;
       this.setSessionPrompts();
       this.dispatchPromptsChange();
+      setTimeout(() => this.updateScrollButtonsState(), 60);
     } else {
       if (ENABLE_LOGGING) console.warn(
         `Attempted to remove non-existent prompt ID: ${promptIdToRemove}`,
@@ -2188,12 +2505,71 @@ class PromptDj extends LitElement {
     }
   }
 
-  private handlePromptsContainerWheel(e: WheelEvent) {
-    const container = e.currentTarget as HTMLElement;
-    if (e.deltaX !== 0) {
-      container.scrollLeft += e.deltaX;
-    }
+  public updateScrollButtonsState = () => {
+    const el = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    this.canScrollLeft = scrollLeft > 10;
+    this.canScrollRight = scrollLeft < scrollWidth - clientWidth - 10;
+  };
+
+  private scrollPrompts(direction: 'left' | 'right') {
+    const el = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    if (!el) return;
+    const scrollAmount = Math.max(220, Math.floor(el.clientWidth * 0.5));
+    el.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
   }
+
+  private handlePromptsContainerWheel = (e: WheelEvent) => {
+    const container = e.currentTarget as HTMLElement;
+    // Prefer deltaX if trackpad horizontal swipe, otherwise deltaY for vertical mouse wheel
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (delta !== 0) {
+      e.preventDefault();
+      container.scrollLeft += delta * 1.3;
+      this.updateScrollButtonsState();
+    }
+  };
+
+  private handleContainerMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('.slider-track-wrapper') ||
+      target.closest('input') ||
+      target.closest('button') ||
+      target.closest('#text')
+    ) {
+      return;
+    }
+    const container = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    if (!container) return;
+
+    this.isContainerDragging = true;
+    this.containerDragStartX = e.pageX;
+    this.containerDragScrollLeft = container.scrollLeft;
+    container.classList.add('is-grabbing');
+  };
+
+  private handleContainerMouseMove = (e: MouseEvent) => {
+    if (!this.isContainerDragging) return;
+    const container = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    if (!container) return;
+    e.preventDefault();
+    const walk = (e.pageX - this.containerDragStartX) * 1.4;
+    container.scrollLeft = this.containerDragScrollLeft - walk;
+    this.updateScrollButtonsState();
+  };
+
+  private handleContainerMouseUp = () => {
+    if (!this.isContainerDragging) return;
+    this.isContainerDragging = false;
+    const container = this.renderRoot.querySelector('#prompts-container') as HTMLElement | null;
+    container?.classList.remove('is-grabbing');
+  };
 
   private updateSettings = throttle(
     async (e: CustomEvent<AppLiveMusicGenerationConfig>) => {
@@ -3000,15 +3376,40 @@ class PromptDj extends LitElement {
     });
 
     return html`<div id="background" style=${bg}></div>
-      <div class="prompts-area">
+      <div class="prompts-area-wrapper">
+        <button
+          class="prompts-nav-btn prev ${this.canScrollLeft ? 'visible' : ''}"
+          @click=${() => this.scrollPrompts('left')}
+          title="Прокрутить каналы влево (или колесо мыши)"
+          aria-label="Scroll left">
+          ‹
+        </button>
+
+        <div class="prompts-edge-shadow-left ${this.canScrollLeft ? 'visible' : ''}"></div>
+        <div class="prompts-edge-shadow-right ${this.canScrollRight ? 'visible' : ''}"></div>
+
         <div
           id="prompts-container"
           @prompt-removed=${this.handlePromptRemoved}
           @prompt-lock-toggled=${this.handlePromptLockToggled}
-          @wheel=${this.handlePromptsContainerWheel}>
+          @wheel=${this.handlePromptsContainerWheel}
+          @scroll=${this.updateScrollButtonsState}
+          @mousedown=${this.handleContainerMouseDown}
+          @mousemove=${this.handleContainerMouseMove}
+          @mouseup=${this.handleContainerMouseUp}
+          @mouseleave=${this.handleContainerMouseUp}>
           ${this.renderPrompts()}
         </div>
-        <div class.add-prompt-button-container>
+
+        <button
+          class="prompts-nav-btn next ${this.canScrollRight ? 'visible' : ''}"
+          @click=${() => this.scrollPrompts('right')}
+          title="Прокрутить каналы вправо (или колесо мыши)"
+          aria-label="Scroll right">
+          ›
+        </button>
+
+        <div class="add-prompt-button-container">
           <add-prompt-button @click=${this.handleAddPrompt} title="Add New Prompt"></add-prompt-button>
           <add-random-prompt-button @click=${this.handleAddRandomPrompt} title="Add Random Prompt"></add-random-prompt-button>
         </div>
@@ -3051,6 +3452,15 @@ class PromptDj extends LitElement {
                   <span class="slider"></span>
               </label>
           </div>
+          <div class="stabilizer-container ${this.keepScreenOn ? 'screen-active' : ''}" title="Не гасить экран: запрещает устройству выключать дисплей и уходить в сон во время воспроизведения музыки">
+              <label for="screen-wake-toggle">📱 Экран</label>
+              <label class="switch">
+                  <input type="checkbox" id="screen-wake-toggle"
+                      .checked=${this.keepScreenOn}
+                      @change=${this.toggleKeepScreenOn}>
+                  <span class="slider"></span>
+              </label>
+          </div>
           <div class="stabilizer-container" title="Автоматически переподключаться при обрыве связи">
               <label for="continuous-playback-toggle">Непрерывно</label>
               <label class="switch">
@@ -3078,6 +3488,8 @@ class PromptDj extends LitElement {
             @auto-volume-setting-changed=${this.handleAutoVolumeSettingChanged}
             @open-presets-manager=${() => { this.isSettingsModalOpen = false; this.isPresetManagerOpen = true; }}
             @open-info-modal=${() => { this.isSettingsModalOpen = false; this.isInfoModalOpen = true; }}
+            .keepScreenOn=${this.keepScreenOn}
+            @toggle-keep-screen-on=${() => this.toggleKeepScreenOn()}
             .vinylVolume=${this.vinylVolume}
             .isVinylPlaying=${this.isVinylPlaying}
             .vinylLoopEnabled=${this.vinylLoopEnabled}
